@@ -1,0 +1,37 @@
+---
+title: "OxPhos Disease-Associated Variant Analysis"
+author: "Abhilesh Dhawanjewar"
+format:
+    html:
+        code-fold: true
+        embed-resources: true
+        toc: true
+        toc-location: left
+        html-math-method: katex
+        theme: cosmo
+execute:
+    echo: false
+    warning: false
+    message: false
+---
+
+```{r}
+#| label: setup
+
+library(here)
+```
+
+## Data Sources
+
+#### Cannonical OXPHOS Gene List
+
+The list of canonical OXPHOS genes was obtained from the HUGO Gene Nomenclature Committee database for gene group: [Mitochondrial respiratory chain complex subunits](https://www.genenames.org/data/genegroup/#!/group/639)
+
+#### Disease Variant Annotations
+
+Missense disease-associated variants for mtDNA were retrieved from the [MITOMAP database](https://www.mitomap.org/MITOMAP/MutationsCodingControl) for mitochondrial genes and from the [ClinVar database](https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz) for nuclear-encoded OXPHOS genes.
+
+The reference genome for these annotations were:
+
+- mtDNA: `NC_012920.1` (rCRS) for mtDNA
+- nucDNA: `GRCh38` for nuclear DNA.
