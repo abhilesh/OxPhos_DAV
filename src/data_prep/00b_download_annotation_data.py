@@ -8,6 +8,7 @@ Primary sources:
 
 """
 
+import csv
 import json
 import io
 import re
@@ -47,18 +48,31 @@ def get_cached_path(target_path: Path, date_str: str) -> Path:
 
 # Files
 GENE_LIST_TARGET = DATA_DIR / f"Canonical_OXPHOS_Subunits_HGNC_{today}.csv"
-MITOMAP_FILE_TARGET = DATA_DIR / f"MITOMAP_CodingVariants_{today}.tsv"
-CLINVAR_FILE_TARGET = DATA_DIR / f"ClinVar_VariantSummary_{today}.txt.gz"
+MITOMAP_FILE_TARGET = RAW_DIR / f"MITOMAP_CodingVariants_{today}.tsv"
+CLINVAR_FILE_TARGET = RAW_DIR / f"ClinVar_VariantSummary_{today}.txt.gz"
+MITIMPACT_FILE_TARGET = RAW_DIR / f"MitImpact_db_{today}.txt.zip"
+PHYLOTREE_FILE_TARGET = RAW_DIR / f"PhyloTree_build_17_{today}.zip"
+GNOMAD_FILE_TARGET = RAW_DIR / f"gnomAD_{today}.vcf.bgz"
+MYVARIANT_FILE_TARGET = RAW_DIR / f"MyVariant_dbNSFP_gnomAD_{today}.json"
+
 
 GENE_LIST = get_cached_path(GENE_LIST_TARGET, today)
 MITOMAP_FILE = get_cached_path(MITOMAP_FILE_TARGET, today)
 CLINVAR_FILE = get_cached_path(CLINVAR_FILE_TARGET, today)
+MITIMPACT_FILE = get_cached_path(MITIMPACT_FILE_TARGET, today)
+PHYLOTREE_FILE = get_cached_path(PHYLOTREE_FILE_TARGET, today)
+MYVARIANT_FILE = get_cached_path(MYVARIANT_FILE_TARGET, today)
+
 
 # URLs
 MITOMAP_URL = "https://www.mitomap.org/cgi-bin/disease.cgi"
 CLINVAR_URL = (
     "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"
 )
+MITIMPACT_URL = "https://mitimpact.css-mendel.it/cdn/MitImpact_db_3.1.3.txt.zip"
+PHYLOTREE_URL = "https://www.phylotree.org/builds/mtDNA_tree_Build_17%20-%20rCRS-oriented%20version.zip"
+MYVARIANT_URL = "https://myvariant.info/v1/query"
+
 
 # SSL context (macOS sometimes needs relaxed verification for NCBI/Senckenberg)
 _CTX = ssl.create_default_context()
@@ -125,3 +139,96 @@ if not CLINVAR_FILE.exists():
         sys.exit(1)
 else:
     print(f"Using cached: {CLINVAR_FILE.name}")
+
+# --- 3. MitImpact3D APOGEE2 scores ---
+
+if not MITIMPACT_FILE.exists():
+    print("Downloading MitImpact3D...")
+    try:
+        success, detail = download(
+            MITIMPACT_URL, MITIMPACT_FILE, description="MitImpact3D Database"
+        )
+    except Exception as e:
+        print(f"FAILED: {e}")
+        sys.exit(1)
+
+# --- 4. PhyloTree download ---
+if not PHYLOTREE_FILE.exists():
+    print("Downloading PhyloTree build 17...")
+    try:
+        success, detail = download(
+            PHYLOTREE_URL, PHYLOTREE_FILE, description="PhyloTree Build 17"
+        )
+    except Exception as e:
+        print(f"FAILED: {e}")
+        sys.exit(1)
+
+
+def fetch_myvariant_annotations(MYVARIANT_URL):
+    if not GENE_LIST.exists():
+        print(f"\n[WARNING] GENE_LIST ({GENE_LIST.name}) not found!")
+        print("Run the HGNC gene download step first. Skipping MyVariant fetch.")
+        return False
+
+    print("\nFetching dbNSFP & nucDNA gnomAD data via MyVariant API...")
+
+    # Read genes from HGNC list
+    genes = []
+    with open(GENE_LIST, "r", encoding="utf-8") as f:
+        # Note: Use delimiter='\t' because HGNC data is tab-separated!
+        reader = csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            # Extract the 'Approved symbol' column (e.g., SDHA, UQCRC1)
+            sym = row.get("Approved symbol", "").strip()
+            if sym:
+                genes.append(sym)
+
+    if not genes:
+        print("No genes found in GENE_LIST. Cannot query MyVariant.")
+        return False
+
+    print(f"  Found {len(genes)} approved symbols. Querying API in chunks...")
+    url = MYVARIANT_URL
+
+    # Process in chunks of 10 to avoid URI length/payload limits
+    all_results = []
+    chunk_size = 10
+
+    try:
+        for i in range(0, len(genes), chunk_size):
+            chunk = genes[i : i + chunk_size]
+            print(f"    -> Querying: {', '.join(chunk)}")
+            params = {
+                "q": ",".join(chunk),  # Search by gene symbols
+                "scopes": "symbol",  # Tell the API these are gene symbols
+                "fields": "dbnsfp,gnomad_genome,gnomad_exome,vcf",
+                "species": "human",
+                "size": 1000,  # Max variants returned per gene
+            }
+            resp = requests.post(url, data=params, timeout=120)
+            resp.raise_for_status()
+
+            data = resp.json()
+            if isinstance(data, list):
+                all_results.extend(data)
+            time.sleep(0.5)  # Gentle rate limiting
+
+        with open(MYVARIANT_FILE_TARGET, "w") as f:
+            json.dump(all_results, f, indent=2)
+
+        print(
+            f"  Success! Saved {len(all_results)} variant records to {MYVARIANT_FILE_TARGET.name}"
+        )
+        return True
+
+    except Exception as e:
+        print(f"  FAILED MyVariant fetch: {e}")
+        return False
+
+
+if not MYVARIANT_FILE.exists():
+    success = fetch_myvariant_annotations(MYVARIANT_URL)
+    if success:
+        MYVARIANT_FILE = MYVARIANT_FILE_TARGET
+else:
+    print(f"\nUsing cached MyVariant API annotations: {MYVARIANT_FILE.name}")
