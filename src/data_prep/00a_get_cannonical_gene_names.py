@@ -8,11 +8,15 @@ import urllib.request
 import urllib.parse
 import json
 from pathlib import Path
+from datetime import date
+
+# Get today's date for metadata
+today = date.today().isoformat()
 
 # Paths
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
-GENE_LIST = DATA_DIR / "Canonical_OXPHOS_Subunits_HGNC.csv"
+GENE_LIST = DATA_DIR / f"Canonical_OXPHOS_Subunits_HGNC_{today}.csv"
 
 
 def fetch_hgnc_group_genes(group_id, output_path):
