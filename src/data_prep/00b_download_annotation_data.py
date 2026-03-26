@@ -160,82 +160,65 @@ if not PHYLOTREE_FILE.exists():
         sys.exit(1)
 
 
-def fetch_myvariant_annotations(url):
+# --- 5. gnomAD and dbSNFP download ---
+def fetch_myvariant_annotations(MYVARIANT_URL):
     if not GENE_LIST.exists():
-        print(
-            f"\n[WARNING] GENE_LIST ({GENE_LIST.name}) not found! Skipping MyVariant fetch."
-        )
+        print(f"\n[WARNING] GENE_LIST ({GENE_LIST.name}) not found!")
+        print("Run the HGNC gene download step first. Skipping MyVariant fetch.")
         return False
 
     print("\nFetching dbNSFP & nucDNA gnomAD data via MyVariant API...")
+
+    # Read genes from HGNC list
     genes = []
     with open(GENE_LIST, "r", encoding="utf-8") as f:
+        # Note: Use delimiter='\t' because HGNC data is tab-separated!
         reader = csv.DictReader(f, delimiter="\t")
         for row in reader:
+            # Extract the 'Approved symbol' column (e.g., SDHA, UQCRC1)
             sym = row.get("Approved symbol", "").strip()
             if sym:
                 genes.append(sym)
 
     if not genes:
-        print("No genes found. Cannot query MyVariant.")
+        print("No genes found in GENE_LIST. Cannot query MyVariant.")
         return False
 
+    print(f"  Found {len(genes)} approved symbols. Querying API in chunks...")
+    url = MYVARIANT_URL
+
+    # Process in chunks of 10 to avoid URI length/payload limits
     all_results = []
-
-    # Query one gene at a time to safely handle pagination
-    for gene in genes:
-        skip = 0
-        limit = 1000
-
-        while True:
-            params = {
-                "q": gene,
-                "scopes": "symbol",
-                "fields": "dbnsfp,gnomad_genome,gnomad_exome,vcf",
-                "species": "human",
-                "size": limit,
-                "from": skip,
-            }
-
-            try:
-                resp = requests.post(url, data=params, timeout=120)
-                resp.raise_for_status()
-                data = resp.json()
-
-                # MyVariant returns a list of hits for POST requests
-                if isinstance(data, list):
-                    hits = data
-                else:
-                    hits = data.get("hits", [])
-
-                if not hits:
-                    break
-
-                all_results.extend(hits)
-
-                # If we retrieved fewer hits than the limit, we have reached the end for this gene
-                if len(hits) < limit:
-                    break
-
-                skip += limit
-                time.sleep(0.2)
-
-            except Exception as e:
-                print(f"      [Error] Failed on {gene} at skip {skip}: {e}")
-                break
-
-        time.sleep(0.5)
+    chunk_size = 10
 
     try:
+        for i in range(0, len(genes), chunk_size):
+            chunk = genes[i : i + chunk_size]
+            print(f"    -> Querying: {', '.join(chunk)}")
+            params = {
+                "q": ",".join(chunk),  # Search by gene symbols
+                "scopes": "dbnsfp.genename,clinvar.gene.symbol",  # Correct MyVariant fields
+                "fields": "dbnsfp,gnomad_genome,gnomad_exome,vcf,clinvar",
+                "size": 1000,  # Max variants returned per gene
+            }
+            resp = requests.post(url, data=params, timeout=120)
+            resp.raise_for_status()
+
+            data = resp.json()
+            if isinstance(data, list):
+                all_results.extend(data)
+            time.sleep(0.5)  # Gentle rate limiting
+
         with open(MYVARIANT_FILE_TARGET, "w") as f:
             json.dump(all_results, f, indent=2)
-        make_read_only(MYVARIANT_FILE_TARGET)
+
         print(
             f"  Success! Saved {len(all_results)} variant records to {MYVARIANT_FILE_TARGET.name}"
         )
         return True
+
     except Exception as e:
-        print(f"  FAILED to save MyVariant data: {e}")
+        print(f"  FAILED MyVariant fetch: {e}")
         return False
 
 

@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 
@@ -21,3 +22,17 @@ def make_read_only(file_path: Path):
         # 0o444 gives Read permission to User, Group, and Others (no write access)
         file_path.chmod(0o444)
         print(f"    Locked {file_path.name} as Read-Only.")
+
+
+def get_latest(data_dir: Path, pattern: str) -> Path:
+    """
+    Recursively searches a directory for the most recently modified file
+    matching a specific glob pattern.
+    """
+    try:
+        return max(data_dir.rglob(pattern), key=lambda f: f.stat().st_mtime)
+    except ValueError:
+        print(
+            f"Error: File missing matching '{pattern}'. Please run 00b_download_annotation_data.py"
+        )
+        sys.exit(1)
