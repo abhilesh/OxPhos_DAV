@@ -18,7 +18,11 @@ RUN conda install -y -c conda-forge -c bioconda \
     iqtree \
     && conda clean -afy
 
-# Set the Python path so local modules like 'utils' can be imported easily
-ENV PYTHONPATH="/app/src"
+# Copy setup.py and src directory into the container's build context
+COPY setup.py /app/
+COPY src /app/src/
+
+# Install project as an editable Python package
+RUN pip install --no-cache-dir -e .
 
 CMD ["bash"]

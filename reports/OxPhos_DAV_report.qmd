@@ -35,3 +35,17 @@ The reference genome for these annotations were:
 
 - mtDNA: `NC_012920.1` (rCRS) for mtDNA
 - nucDNA: `GRCh38` for nuclear DNA.
+
+#### Supplementary Variant Data
+
+The following databases were used to supplement the disease variant annotations with additional information such as computational pathogenecity predictions, haplogroup associations and population allele frequencies.
+
+mtDNA variant information
+
+- [MitImpact3D](https://mitimpact.mcb2lab.org/) (`v3.1.3`): Computational pathogenicity predictions for missense variants in mitochondrial genes
+- [PhyloTree](https://www.phylotree.org/rCRS-oriented_version.htm) (`Build 17`): mtDNA haplogroup associations for variants
+
+nucDNA variant information
+
+- [gnomAD](https://gnomad.broadinstitute.org/) (`v4.1`): Population allele frequencies and gene-level constraint metrics (pLI, LOEUF, missense oe, missense z-score) for nuclear genes
+- [dbNSFP](https://www.dbnsfp.org/) ()
