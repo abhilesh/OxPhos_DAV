@@ -14,7 +14,7 @@ RUN conda install -y -c conda-forge -c bioconda \
     numpy \
     biopython \
     requests \
-    mafft \
+    macse \
     iqtree \
     && conda clean -afy
 

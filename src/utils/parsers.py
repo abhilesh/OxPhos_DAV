@@ -33,6 +33,8 @@ class VariantAnnotation:
     # Database-specific metadata
     ref_nt: str
     alt_nt: str
+    ref_aa: str
+    alt_aa: str
     genomic_pos: int
     clinvar_stars: Optional[int] = None
     clinvar_review_status: Optional[str] = None
@@ -150,6 +152,14 @@ class MitomapParser:
 
             locus = self._get_locus(pos)
 
+            if 14149 <= pos <= 14673:
+                _comp = {"A": "T", "T": "A", "C": "G", "G": "C"}
+                cds_ref = _comp.get(ref, ref)
+                cds_alt = _comp.get(alt, alt)
+            else:
+                cds_ref = ref
+                cds_alt = alt
+
             # Exclude non-OXPHOS variants and those not in HGNC reference (if provided)
             if locus == "Non-OXPHOS":
                 continue
@@ -183,12 +193,16 @@ class MitomapParser:
                     "locus": locus,
                     "nt_change": f"m.{pos}{ref}>{alt}",
                     "aa_change": aachange,
+                    "ref_aa": match.group(1).upper(),
+                    "alt_aa": match.group(3).upper(),
                     "is_synonymous": is_synonymous,
                     "disease": str(row.get("disease", "")).strip(),
                     "clinical_status": str(row.get("status", "")).strip(),
                     "rCRS_pos": pos,
-                    "ref": ref,
-                    "alt": alt,
+                    "ref": cds_ref,  # CDS-oriented
+                    "alt": cds_alt,  # CDS-oriented
+                    "genomic_ref": ref,  # rCRS
+                    "genomic_alt": alt,
                 }
             )
 
@@ -350,12 +364,13 @@ class ClinvarParser:
         return f"{wt}{m.group(2)}{mut}", wt == mut
 
     def parse(self, file_path: Path) -> list:
+        # 1. Update the columns to load the VCF standard alleles
         usecols = [
             "Assembly",
             "Chromosome",
             "Start",
-            "ReferenceAllele",
-            "AlternateAllele",
+            "ReferenceAlleleVCF",  # Updated from ReferenceAllele
+            "AlternateAlleleVCF",  # Updated from AlternateAllele
             "GeneSymbol",
             "ClinicalSignificance",
             "Type",
@@ -395,14 +410,28 @@ class ClinvarParser:
                 if not aa_change:
                     continue
 
-                nc_match = re.search(r"(c\.[0-9]+[A-Z]>[A-Z])", name)
-                nc_change = (
-                    nc_match.group(1)
-                    if nc_match
-                    else f"g.{row['Start']}{row['ReferenceAllele']}>{row['AlternateAllele']}"
-                )
+                aa_match = re.match(r"^([A-Z])(\d+)([A-Z])$", aa_change)
+                ref_aa = aa_match.group(1) if aa_match else ""
+                alt_aa = aa_match.group(3) if aa_match else ""
+
+                vcf_ref = str(row["ReferenceAlleleVCF"]).strip()
+                vcf_alt = str(row["AlternateAlleleVCF"]).strip()
+
+                # 2. Capture the entire c. string AND the individual nucleotides
+                nc_match = re.search(r"(c\.[0-9]+([A-Z])>([A-Z]))", name)
+
+                if nc_match:
+                    nc_change = nc_match.group(1)  # The full 'c.487T>C'
+                    cds_ref = nc_match.group(2)  # The 'T'
+                    cds_alt = nc_match.group(3)  # The 'C'
+                else:
+                    # Fallback to genomic alleles if no c. notation exists
+                    nc_change = f"g.{row['Start']}{vcf_ref}>{vcf_alt}"
+                    cds_ref = vcf_ref
+                    cds_alt = vcf_alt
 
                 review = str(row.get("ReviewStatus", "")).lower()
+
                 if "practice guideline" in review:
                     stars = 4
                 elif "expert panel" in review:
@@ -414,6 +443,7 @@ class ClinvarParser:
                 else:
                     stars = 0
 
+                # 2. Update the assignment to the variant dictionary
                 clean_variants.append(
                     {
                         "genome": "nucDNA",
@@ -422,6 +452,8 @@ class ClinvarParser:
                         "allele_id": str(row["VariationID"]),
                         "nt_change": nc_change,
                         "aa_change": aa_change,
+                        "ref_aa": ref_aa,
+                        "alt_aa": alt_aa,
                         "is_synonymous": is_syn,
                         "disease": str(row.get("PhenotypeList", "")).strip(),
                         "clinical_status": str(
@@ -430,8 +462,10 @@ class ClinvarParser:
                         "review_status": str(row.get("ReviewStatus", "")).strip(),
                         "stars": stars,
                         "grch38_pos": row["Start"],
-                        "ref": row["ReferenceAllele"],
-                        "alt": row["AlternateAllele"],
+                        "ref": cds_ref,  # CDS-oriented for alignment
+                        "alt": cds_alt,  # CDS-oriented for alignment
+                        "genomic_ref": vcf_ref,  # Genomic for MyVariant lookup
+                        "genomic_alt": vcf_alt,
                     }
                 )
 

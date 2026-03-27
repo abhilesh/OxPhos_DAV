@@ -128,7 +128,6 @@ def main():
     mitomap_parser = MitomapParser(hgnc_reference=hgnc_ref)
     clinvar_parser = ClinvarParser(hgnc_reference=hgnc_ref)
 
-    all_annotations = []
     mt_stats = Counter()
     nuc_stats = Counter()
 
@@ -150,22 +149,27 @@ def main():
             clinical_status=d["clinical_status"],
             ref_nt=d["ref"],
             alt_nt=d["alt"],
+            ref_aa=d.get("ref_aa", ""),
+            alt_aa=d.get("alt_aa", ""),
             genomic_pos=d["rCRS_pos"],
         )
 
         apogee, mitoclass = mitimpact_parser.get_metrics(
-            variant.genomic_pos, variant.ref_nt, variant.alt_nt
+            variant.genomic_pos,
+            d.get("genomic_ref", variant.ref_nt),
+            d.get("genomic_alt", variant.alt_nt),
         )
         variant.pathogenic_score = apogee
         variant.mitoclass = mitoclass
         variant.is_haplogroup_marker = phylotree_parser.is_haplogroup(
-            variant.genomic_pos, variant.ref_nt, variant.alt_nt
+            variant.genomic_pos,
+            d.get("genomic_ref", variant.ref_nt),
+            d.get("genomic_alt", variant.alt_nt),
         )
 
         variant.tier = assign_mtdna_tier(variant)
         mt_stats[variant.tier.split(":")[0]] += 1
         mt_annotations.append(variant)
-        all_annotations.append(variant)
 
     # ==== 4. Process Nuclear DNA ====
     print("Processing nucDNA (ClinVar) variants...")
@@ -185,6 +189,8 @@ def main():
             clinical_status=d["clinical_status"],
             ref_nt=d["ref"],
             alt_nt=d["alt"],
+            ref_aa=d.get("ref_aa", ""),
+            alt_aa=d.get("alt_aa", ""),
             genomic_pos=d["grch38_pos"],
             clinvar_stars=d["stars"],
             clinvar_review_status=d["review_status"],
@@ -193,8 +199,8 @@ def main():
         revel, af = myvariant_parser.get_metrics(
             chrom=d["chromosome"],
             pos=variant.genomic_pos,
-            ref=variant.ref_nt,
-            alt=variant.alt_nt,
+            ref=d.get("genomic_ref", variant.ref_nt),
+            alt=d.get("genomic_alt", variant.alt_nt),
         )
         variant.pathogenic_score = revel
         variant.population_frequency = af
@@ -202,13 +208,11 @@ def main():
         variant.tier = assign_nucdna_tier(variant)
         nuc_stats[variant.tier] += 1
         nuc_annotations.append(variant)
-        all_annotations.append(variant)
 
     # ==== 5. Export Outputs ====
     print("\nSaving curated datasets...")
     save_outputs(mt_annotations, "mtDNA")
     save_outputs(nuc_annotations, "nucDNA")
-    save_outputs(all_annotations, "all")
 
     # ==== 6. Print Summary ====
     print(f"\n{'='*50}")
@@ -223,7 +227,7 @@ def main():
     for tier, count in nuc_stats.most_common():
         print(f"  {tier:<20}: {count}")
 
-    print(f"\nTotal Output: {len(all_annotations)} variants.")
+    print(f"\nTotal Output: {len(mt_annotations) + len(nuc_annotations)} variants.")
 
 
 if __name__ == "__main__":
