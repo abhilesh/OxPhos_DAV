@@ -1,3 +1,4 @@
+import csv
 import json
 import re
 from collections import Counter, defaultdict
@@ -25,34 +26,82 @@ MT_NT_DIR = DATA_DIR / "alignments" / "mtdna_codon"
 OUT_JSON_MT = CURATED_DIR / "cdar_classifications_mtDNA.json"
 OUT_JSON_NUC = CURATED_DIR / "cdar_classifications_nucDNA.json"
 
+MT_COORD_FILE = DATA_DIR / "reference" / "mtdna_gene_coordinates.tsv"
+
+
+_MT_ALIAS = {
+    "MT-COX1": "MT-CO1",
+    "MT-COX2": "MT-CO2",
+    "MT-COX3": "MT-CO3",
+    "MT-CYTB": "MT-CYB",
+}
+
+
+def _load_mt_coords() -> dict:
+    """Returns {gene: (start, end, strand)} from mtdna_gene_coordinates.tsv.
+
+    Entries are indexed under both the coordinate-file name and the MITOMAP alias
+    (e.g. MT-COX1 is also accessible as MT-CO1) so variant locus names resolve.
+    """
+    coords = {}
+    if not MT_COORD_FILE.exists():
+        return coords
+    with open(MT_COORD_FILE) as f:
+        for row in csv.DictReader(f, delimiter="\t"):
+            start, end = int(row["start"]), int(row["end"])
+            entry = (min(start, end), max(start, end), row["strand"])
+            coords[row["gene"]] = entry
+            if row["gene"] in _MT_ALIAS:
+                coords[_MT_ALIAS[row["gene"]]] = entry
+    return coords
+
+
+MT_COORDS = _load_mt_coords()
+
+
+def _genomic_to_cds(genomic_pos: int, locus: str) -> int | None:
+    """Converts a rCRS genomic position to a 1-indexed CDS position."""
+    if locus not in MT_COORDS:
+        return None
+    start, end, strand = MT_COORDS[locus]
+    if strand == "+":
+        return genomic_pos - start + 1
+    else:
+        return end - genomic_pos + 1
+
 
 def parse_variant_coordinates(variant: dict) -> tuple:
-    """Extracts biological AA and exact NT coordinates from standard variant strings."""
+    """Extracts biological AA and exact NT coordinates from standard variant strings.
+
+    Returns (aa_pos, wt_aa, mut_aa, nt_pos).
+    For mtDNA: derives exact CDS position from genomic coordinate via mtdna_gene_coordinates.tsv.
+    For nucDNA: uses c. CDS coordinate from nc_change.
+    Fallback: (aa_pos * 3) - 2 — always first base of the codon.
+    """
     aa_str = variant.get("aa_change", "")
     nc_str = variant.get("nc_change", "")
 
-    # Extract AA Position and Mutant AA (e.g., "L109F" -> pos: 109, mut: "F")
-    aa_match = re.search(r"[a-zA-Z]+(\d+)([a-zA-Z]+)", aa_str)
+    aa_match = re.search(r"([a-zA-Z]+)(\d+)([a-zA-Z]+)", aa_str)
     if not aa_match:
-        return None, None, None
+        return None, None, None, None
 
-    aa_pos = int(aa_match.group(1))
-    mut_aa = aa_match.group(2)
+    wt_aa  = aa_match.group(1)
+    aa_pos = int(aa_match.group(2))
+    mut_aa = aa_match.group(3)
 
-    # Extract Exact NT Position
-    nt_pos = None
     if variant["genome"] == "nucDNA":
-        # nucDNA variants use c. coordinates (e.g., c.327G>C), which perfectly match our 1-indexed CDS alignment
         nc_match = re.search(r"c\.(\d+)", nc_str)
         if nc_match:
-            nt_pos = int(nc_match.group(1))
+            return aa_pos, wt_aa, mut_aa, int(nc_match.group(1))
+    else:
+        genomic_pos = variant.get("genomic_pos")
+        locus = variant.get("locus", "").split("/")[0]
+        if genomic_pos and locus:
+            cds_pos = _genomic_to_cds(genomic_pos, locus)
+            if cds_pos:
+                return aa_pos, wt_aa, mut_aa, cds_pos
 
-    # Fallback (This will keep the script from crashing if a variant is missing a c. string,
-    # but we will need to handle mtDNA absolute mapping separately when MACSE finishes)
-    if not nt_pos:
-        nt_pos = (aa_pos * 3) - 2
-
-    return aa_pos, mut_aa, nt_pos
+    return aa_pos, wt_aa, mut_aa, (aa_pos * 3) - 2
 
 
 def get_alignment_paths(locus: str, genome: str) -> tuple:
@@ -101,7 +150,7 @@ def process_variants(variants: list, genome: str, loaded_alignments: dict) -> tu
         if "Discarded" in tier or var["is_synonymous"]:
             continue
 
-        aa_pos, mut_aa, nt_pos = parse_variant_coordinates(var)
+        aa_pos, wt_aa, mut_aa, nt_pos = parse_variant_coordinates(var)
         if not aa_pos:
             continue
 
@@ -120,7 +169,16 @@ def process_variants(variants: list, genome: str, loaded_alignments: dict) -> tu
             continue
 
         # === Ref Allele Verification ===
-        is_ref_match = check_ref_allele(parser, nt_pos, var["ref_nt"])
+        # For minus-strand genes, VCF alleles are genomic (+strand) but TOGA
+        # codon alignments are CDS-oriented (coding strand) — complement before checking
+        ref_nt = var["ref_nt"]
+        alt_nt = var["alt_nt"]
+        if var.get("mitoclass", "").endswith("-"):
+            _comp = {"A": "T", "T": "A", "C": "G", "G": "C"}
+            ref_nt = _comp.get(ref_nt, ref_nt)
+            alt_nt = _comp.get(alt_nt, alt_nt)
+
+        is_ref_match = check_ref_allele(parser, nt_pos, ref_nt)
         if not is_ref_match:
             ref_mismatch += 1
             var["ref_allele_match"] = False
@@ -130,18 +188,22 @@ def process_variants(variants: list, genome: str, loaded_alignments: dict) -> tu
             var["mismatch_reason"] = None
 
         # Calculate mutant codon and test compensation
-        mut_codon = parser.extract_mutant_codon(nt_pos, var["alt_nt"])
+        mut_codon = parser.extract_mutant_codon(nt_pos, alt_nt)
         if not mut_codon:
             continue
 
         # === Triangle of Truth Validation (Transcript Check) ===
+        # nucDNA only — mtDNA skips this because MACSE alignments don't guarantee
+        # isoform identity with MITOMAP, and the genetic code check is handled separately.
+        # table=2 = vertebrate mitochondrial code (ATA=M, TGA=W, AGA/AGG=Stop).
         if genome == "nucDNA":
+            _table = 1  # standard genetic code for nucDNA
             try:
-                translated_aa = str(Seq(mut_codon).translate())
+                translated_aa = str(Seq(mut_codon).translate(table=_table))
             except Exception:
                 translated_aa = "ERR"
 
-            expected_aa = var.get("alt_aa", mut_aa)
+            expected_aa = var.get("alt_aa") or mut_aa
 
             if translated_aa != expected_aa:
                 var["ref_allele_match"] = False
@@ -165,7 +227,7 @@ def process_variants(variants: list, genome: str, loaded_alignments: dict) -> tu
                 tier_stats[tier]["Total"] += 1
                 continue
 
-        comp_results = parser.check_compensation(aa_pos, mut_aa, nt_pos, mut_codon)
+        comp_results = parser.check_compensation(aa_pos, wt_aa, mut_aa, nt_pos, mut_codon)
 
         # Update variant object
         var["cdar_aa"] = comp_results["aa_cdar"]

@@ -14,11 +14,14 @@ from utils.utils import get_latest
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
 ALIGN_DIR = DATA_DIR / "alignments" / "toga_hg38_codon"
+REF_DIR = DATA_DIR / "reference"
+
 ALIGN_DIR.mkdir(parents=True, exist_ok=True)
+REF_DIR.mkdir(parents=True, exist_ok=True)
 
 BASE_URL = "https://genome.senckenberg.de/download/TOGA/human_hg38_reference/MultipleCodonAlignments"
 OVERVIEW_URL = "https://genome.senckenberg.de/download/TOGA/human_hg38_reference/overview.table.tsv"
-OVERVIEW_FILE = ALIGN_DIR / "TOGA_overview_table_hg38.tsv"
+OVERVIEW_FILE = REF_DIR / "TOGA_overview_table_hg38.tsv"
 
 # Disable SSL verification for academic servers
 ctx = ssl.create_default_context()

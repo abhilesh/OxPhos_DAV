@@ -1,191 +1,137 @@
 import csv
+import gzip
 import io
 import json
 import re
 import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
-
 import pandas as pd
-
-
-# ==========================================
-# 1. CORE DATA MODEL
-# ==========================================
 
 
 @dataclass
 class VariantAnnotation:
-    """Standardized representation for both mtDNA and nucDNA annotations."""
-
-    # Core parsed attributes
-    ann_id: str  # e.g., 'm.8573G>A' or ClinVar AlleleID
-    locus: str  # e.g., 'MT-ND5' or 'SDHA'
-    nc_change: str  # e.g., 'm.8573G>A' or 'c.327G>C'
-    aa_change: str  # e.g., 'L109F'
-    is_synonymous: bool  # True if synonymous, False if missense
-    disease: str  # Phenotype or disease string
-    genome: str  # 'mtDNA' or 'nucDNA'
-    reference_assembly: str  # e.g., 'rCRS' or 'GRCh38'
-    clinical_status: str  # Original status string from the database
-
-    # Database-specific metadata
+    ann_id: str
+    locus: str
+    nc_change: str
+    aa_change: str
+    is_synonymous: bool
+    disease: str
+    genome: str
+    reference_assembly: str
+    clinical_status: str
     ref_nt: str
     alt_nt: str
-    ref_aa: str
-    alt_aa: str
-    genomic_pos: int
-    clinvar_stars: Optional[int] = None
-    clinvar_review_status: Optional[str] = None
-
-    # Supplementary metadata
-    is_haplogroup_marker: Optional[bool] = None
-    mitoclass: Optional[str] = None
-    population_frequency: Optional[float] = None
-
-    # Downstream classification attributes
-    tier: Optional[str] = None
-    pathogenic_score: Optional[float] = None
+    ref_aa: str = ""
+    alt_aa: str = ""
+    genomic_pos: int = 0
+    clinvar_stars: int = 0
+    clinvar_review_status: str = ""
+    pathogenic_score: float = 0.0
+    population_frequency: float = 0.0
+    mitoclass: str = ""
+    is_haplogroup_marker: bool = False
+    tier: str = "Unassigned"
 
     def to_dict(self):
         return asdict(self)
 
 
-# ==========================================
-# 2. BASE FILTERS & REFERENCES
-# ==========================================
-
-
 class GeneReference:
-    def __init__(self, file_path: Path):
-        self.lookup = self._load_hgnc_reference(file_path)
+    def __init__(self, hgnc_csv: Path):
+        self.lookup = {}
+        self.mt_genes = []
+        self._load_hgnc(hgnc_csv)
 
-    def _load_hgnc_reference(self, file_path: Path) -> dict:
-        """Loads HGNC data into a dictionary for O(1) retrieval."""
-        gene_reference = {}
-
-        with open(file_path, "r", encoding="utf-8") as f:
+    def _load_hgnc(self, hgnc_csv: Path):
+        with open(hgnc_csv, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f, delimiter="\t")
-
             for row in reader:
-                primary_symbol = row.get("Approved symbol", "").strip()
-                if not primary_symbol:
-                    continue
-
-                gene_data = {
-                    "hgnc_id": row.get("HGNC ID", ""),
-                    "primary_symbol": primary_symbol,
-                    "group": row.get("Group name", "Unknown OXPHOS Complex"),
-                    "ensembl_id": row.get("Ensembl gene ID", ""),
+                sym = row["Approved symbol"].strip()
+                entry = {
+                    "name": row["Approved name"],
+                    "group": row["Group name"],
+                    "symbol": sym,
                 }
-
-                gene_reference[primary_symbol] = gene_data
-
-                aliases = row.get("Alias symbols", "").split(",")
-                for alias in aliases:
-                    alias = alias.strip()
-                    if alias and alias not in gene_reference:
-                        gene_reference[alias] = gene_data
-
-                prev_symbols = row.get("Previous symbols", "").split(",")
-                for prev in prev_symbols:
+                self.lookup[sym] = entry
+                # Also index previous symbols so ClinVar variants annotated
+                # with old gene names (e.g. NDUFA4 -> COXFA4) are accepted
+                for prev in str(row.get("Previous symbols", "")).split(","):
                     prev = prev.strip()
-                    if prev and prev not in gene_reference:
-                        gene_reference[prev] = gene_data
+                    if prev:
+                        self.lookup[prev] = entry
 
-        return gene_reference
+    def load_coordinates(self, coord_tsv: Path):
+        if not coord_tsv.exists():
+            return
+        with open(coord_tsv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            for row in reader:
+                symbol = row["gene"]
+                if symbol in self.lookup:
+                    raw_start, raw_end = int(row["start"]), int(row["end"])
+                    # Minus-strand genes are stored as start > end in the coordinate
+                    # file; normalise to (min, max) for range checks
+                    coord_start = min(raw_start, raw_end)
+                    coord_end = max(raw_start, raw_end)
+                    self.lookup[symbol].update(
+                        {
+                            "chr": row["chr"],
+                            "start": coord_start,
+                            "end": coord_end,
+                            "strand": row["strand"],
+                        }
+                    )
+                    if row["chr"] in ["MT", "chrM"] or symbol.startswith("MT-"):
+                        self.mt_genes.append(
+                            (symbol, coord_start, coord_end)
+                        )
+
+    def get_mt_locus_by_position(self, pos: int) -> str:
+        genes = [gene for gene, start, end in self.mt_genes if start <= pos <= end]
+        return "/".join(genes) if genes else "Non-OXPHOS"
 
     def get_gene_data(self, symbol: str) -> dict:
-        return self.lookup.get(str(symbol).strip())
-
-    def is_target(self, symbol: str) -> bool:
-        return str(symbol).strip() in self.lookup
-
-
-# ==========================================
-# 3. MITOCHONDRIAL PARSERS
-# ==========================================
+        """Retrieves coordinate and strand data for a specific gene locus."""
+        return self.lookup.get(symbol, {})
 
 
 class MitomapParser:
-    def __init__(self, hgnc_reference=None):
+    def __init__(self, hgnc_reference: GeneReference):
         self.hgnc_reference = hgnc_reference
-        self.mt_genes = [
-            ("MT-ND1", 3307, 4262),
-            ("MT-ND2", 4470, 5511),
-            ("MT-CO1", 5904, 7445),
-            ("MT-CO2", 7586, 8269),
-            ("MT-ATP8", 8366, 8572),
-            ("MT-ATP6", 8527, 9207),
-            ("MT-CO3", 9207, 9990),
-            ("MT-ND3", 10059, 10404),
-            ("MT-ND4L", 10470, 10766),
-            ("MT-ND4", 10760, 12137),
-            ("MT-ND5", 12337, 14148),
-            ("MT-ND6", 14149, 14673),
-            ("MT-CYB", 14747, 15887),
-        ]
-
-    def _get_locus(self, pos: int) -> str:
-        genes = [name for name, start, end in self.mt_genes if start <= pos <= end]
-        return "/".join(genes) if genes else "Non-OXPHOS"
 
     def parse(self, file_path: Path) -> list:
-        # Using windows-1252 to handle legacy bytes like 0xa0
         df = pd.read_csv(
             file_path, sep="\t", on_bad_lines="skip", encoding="windows-1252"
         )
         df.columns = [c.strip().lower() for c in df.columns]
-
         clean_variants = []
-
         for _, row in df.iterrows():
             try:
                 pos = int(row.get("pos", 0))
-            except ValueError:
+            except:
                 continue
-
-            ref = str(row.get("ref", "")).strip().upper()
-            alt = str(row.get("alt", "")).strip().upper()
-            aachange = str(row.get("aachange", "")).strip()
-
-            locus = self._get_locus(pos)
-
-            if 14149 <= pos <= 14673:
-                _comp = {"A": "T", "T": "A", "C": "G", "G": "C"}
-                cds_ref = _comp.get(ref, ref)
-                cds_alt = _comp.get(alt, alt)
-            else:
-                cds_ref = ref
-                cds_alt = alt
-
-            # Exclude non-OXPHOS variants and those not in HGNC reference (if provided)
+            locus = self.hgnc_reference.get_mt_locus_by_position(pos)
             if locus == "Non-OXPHOS":
                 continue
 
-            if self.hgnc_reference:
-                locus_genes = locus.split("/")
-                if not any(self.hgnc_reference.is_target(g) for g in locus_genes):
-                    continue
-
-            # Strict parsing for point mutations and valid amino acid changes
-            if len(ref) > 1 or len(alt) > 1:
-                continue
-            if (
-                not aachange
-                or "noncoding" in aachange.lower()
-                or "frameshift" in aachange.lower()
+            ref, alt = str(row.get("ref", "")).upper(), str(row.get("alt", "")).upper()
+            aachange = str(row.get("aachange", "")).strip()
+            if not aachange or any(
+                x in aachange.lower() for x in ["noncoding", "frameshift", "*", "ter"]
             ):
-                continue
-            if "*" in aachange or "Ter" in aachange or "Stop" in aachange:
                 continue
 
             match = re.match(r"^([a-zA-Z]+)(\d+)([a-zA-Z]+)$", aachange)
             if not match:
                 continue
 
-            is_synonymous = match.group(1).upper() == match.group(3).upper()
+            # Strand correction for MT-ND6
+            if 14149 <= pos <= 14673:
+                comp = {"A": "T", "T": "A", "C": "G", "G": "C"}
+                c_ref, c_alt = comp.get(ref, ref), comp.get(alt, alt)
+            else:
+                c_ref, c_alt = ref, alt
 
             clean_variants.append(
                 {
@@ -195,18 +141,107 @@ class MitomapParser:
                     "aa_change": aachange,
                     "ref_aa": match.group(1).upper(),
                     "alt_aa": match.group(3).upper(),
-                    "is_synonymous": is_synonymous,
+                    "is_synonymous": match.group(1).upper() == match.group(3).upper(),
                     "disease": str(row.get("disease", "")).strip(),
                     "clinical_status": str(row.get("status", "")).strip(),
                     "rCRS_pos": pos,
-                    "ref": cds_ref,  # CDS-oriented
-                    "alt": cds_alt,  # CDS-oriented
-                    "genomic_ref": ref,  # rCRS
+                    "ref": c_ref,
+                    "alt": c_alt,
+                    "genomic_ref": ref,
                     "genomic_alt": alt,
                 }
             )
-
         return clean_variants
+
+
+class ClinvarParser:
+    def __init__(self, hgnc_reference=None):
+        self.hgnc_reference = hgnc_reference
+        self.three_to_one = {
+            "Ala": "A",
+            "Arg": "R",
+            "Asn": "N",
+            "Asp": "D",
+            "Cys": "C",
+            "Gln": "Q",
+            "Glu": "E",
+            "Gly": "G",
+            "His": "H",
+            "Ile": "I",
+            "Leu": "L",
+            "Lys": "K",
+            "Met": "M",
+            "Phe": "F",
+            "Pro": "P",
+            "Ser": "S",
+            "Thr": "T",
+            "Trp": "W",
+            "Tyr": "Y",
+            "Val": "V",
+        }
+
+    def _parse_protein(self, name):
+        m = re.search(r"p\.([A-Z][a-z]{2}|\*)(\d+)([A-Z][a-z]{2}|\*)", str(name))
+        if not m or "*" in m.groups():
+            return None, False
+        wt, mut = self.three_to_one.get(m.group(1), "X"), self.three_to_one.get(
+            m.group(3), "X"
+        )
+        return f"{wt}{m.group(2)}{mut}", wt == mut
+
+    def parse(self, file_path: Path) -> list:
+        clean = []
+        for chunk in pd.read_csv(
+            file_path, sep="\t", compression="gzip", chunksize=50000, low_memory=False
+        ):
+            mask = (
+                (chunk["Assembly"] == "GRCh38")
+                & (chunk["Type"] == "single nucleotide variant")
+                & (chunk["Chromosome"] != "MT")
+            )
+            for _, row in chunk[mask].iterrows():
+                gene = str(row["GeneSymbol"]).strip()
+                if self.hgnc_reference:
+                    if gene not in self.hgnc_reference.lookup:
+                        continue
+                    # Resolve to canonical approved symbol (handles renamed genes)
+                    gene = self.hgnc_reference.lookup[gene].get("symbol", gene)
+                aa_change, is_syn = self._parse_protein(row["Name"])
+                if not aa_change or "X" in aa_change:
+                    continue
+
+                review = str(row.get("ReviewStatus", "")).strip()
+                r = review.lower()
+                if "guideline" in r:
+                    stars = 4
+                elif "expert" in r:
+                    stars = 3
+                elif "multiple" in r and "no conflicts" in r:
+                    stars = 2
+                elif "single submitter" in r or "conflicting" in r:
+                    stars = 1
+                else:
+                    stars = 0
+
+                clean.append(
+                    {
+                        "genome": "nucDNA",
+                        "chromosome": str(row["Chromosome"]),
+                        "locus": gene,
+                        "allele_id": str(row["VariationID"]),
+                        "nt_change": str(row["Name"]),
+                        "aa_change": aa_change,
+                        "is_synonymous": is_syn,
+                        "disease": str(row.get("PhenotypeList", "")),
+                        "clinical_status": str(row.get("ClinicalSignificance", "")),
+                        "review_status": review,
+                        "stars": stars,
+                        "grch38_pos": int(row["Start"]),
+                        "ref": str(row["ReferenceAlleleVCF"]),
+                        "alt": str(row["AlternateAlleleVCF"]),
+                    }
+                )
+        return clean
 
 
 class PhylotreeParser:
@@ -307,215 +342,30 @@ class MitimpactParser:
         return self.lookup.get((pos, ref, alt), (None, ""))
 
 
-# ==========================================
-# 4. NUCLEAR PARSERS
-# ==========================================
-
-
-class ClinvarParser:
-    three_to_one = {
-        "Ala": "A",
-        "Arg": "R",
-        "Asn": "N",
-        "Asp": "D",
-        "Cys": "C",
-        "Gln": "Q",
-        "Glu": "E",
-        "Gly": "G",
-        "His": "H",
-        "Ile": "I",
-        "Leu": "L",
-        "Lys": "K",
-        "Met": "M",
-        "Phe": "F",
-        "Pro": "P",
-        "Ser": "S",
-        "Thr": "T",
-        "Trp": "W",
-        "Tyr": "Y",
-        "Val": "V",
-    }
-
-    def __init__(self, hgnc_reference=None):
-        self.hgnc_reference = hgnc_reference
-
-    def _parse_protein(self, name_field: str):
-        m = re.search(
-            r"p\.([A-Z][a-z]{0,2}|\*)(\d+)([A-Z][a-z]{0,2}|\*)", str(name_field)
-        )
-        if not m:
-            return None, False
-
-        wt_raw = m.group(1)
-        mut_raw = m.group(3)
-
-        stop_flags = ["Ter", "*", "X"]
-        if (
-            mut_raw in stop_flags
-            or wt_raw in stop_flags
-            or "Ter" in mut_raw
-            or "Ter" in wt_raw
-        ):
-            return None, False
-
-        wt = self.three_to_one.get(wt_raw, wt_raw)
-        mut = self.three_to_one.get(mut_raw, mut_raw)
-
-        return f"{wt}{m.group(2)}{mut}", wt == mut
-
-    def parse(self, file_path: Path) -> list:
-        # 1. Update the columns to load the VCF standard alleles
-        usecols = [
-            "Assembly",
-            "Chromosome",
-            "Start",
-            "ReferenceAlleleVCF",  # Updated from ReferenceAllele
-            "AlternateAlleleVCF",  # Updated from AlternateAllele
-            "GeneSymbol",
-            "ClinicalSignificance",
-            "Type",
-            "Name",
-            "PhenotypeList",
-            "ReviewStatus",
-            "VariationID",
-        ]
-
-        clean_variants = []
-        chunk_iterator = pd.read_csv(
-            file_path,
-            sep="\t",
-            compression="gzip",
-            usecols=usecols,
-            chunksize=100000,
-            low_memory=False,
-        )
-
-        for chunk in chunk_iterator:
-            mask = (
-                (chunk["Assembly"] == "GRCh38")
-                & (chunk["Type"] == "single nucleotide variant")
-                & (chunk["Chromosome"] != "MT")
-            )
-            filtered_chunk = chunk[mask]
-
-            for _, row in filtered_chunk.iterrows():
-                gene = str(row["GeneSymbol"]).strip()
-
-                if self.hgnc_reference and not self.hgnc_reference.is_target(gene):
-                    continue
-
-                name = str(row.get("Name", "")).strip()
-                aa_change, is_syn = self._parse_protein(name)
-
-                if not aa_change:
-                    continue
-
-                aa_match = re.match(r"^([A-Z])(\d+)([A-Z])$", aa_change)
-                ref_aa = aa_match.group(1) if aa_match else ""
-                alt_aa = aa_match.group(3) if aa_match else ""
-
-                vcf_ref = str(row["ReferenceAlleleVCF"]).strip()
-                vcf_alt = str(row["AlternateAlleleVCF"]).strip()
-
-                # 2. Capture the entire c. string AND the individual nucleotides
-                nc_match = re.search(r"(c\.[0-9]+([A-Z])>([A-Z]))", name)
-
-                if nc_match:
-                    nc_change = nc_match.group(1)  # The full 'c.487T>C'
-                    cds_ref = nc_match.group(2)  # The 'T'
-                    cds_alt = nc_match.group(3)  # The 'C'
-                else:
-                    # Fallback to genomic alleles if no c. notation exists
-                    nc_change = f"g.{row['Start']}{vcf_ref}>{vcf_alt}"
-                    cds_ref = vcf_ref
-                    cds_alt = vcf_alt
-
-                review = str(row.get("ReviewStatus", "")).lower()
-
-                if "practice guideline" in review:
-                    stars = 4
-                elif "expert panel" in review:
-                    stars = 3
-                elif "multiple submitters" in review and "no conflicts" in review:
-                    stars = 2
-                elif "single submitter" in review or "conflicting" in review:
-                    stars = 1
-                else:
-                    stars = 0
-
-                # 2. Update the assignment to the variant dictionary
-                clean_variants.append(
-                    {
-                        "genome": "nucDNA",
-                        "chromosome": str(row["Chromosome"]),
-                        "locus": gene,
-                        "allele_id": str(row["VariationID"]),
-                        "nt_change": nc_change,
-                        "aa_change": aa_change,
-                        "ref_aa": ref_aa,
-                        "alt_aa": alt_aa,
-                        "is_synonymous": is_syn,
-                        "disease": str(row.get("PhenotypeList", "")).strip(),
-                        "clinical_status": str(
-                            row.get("ClinicalSignificance", "")
-                        ).strip(),
-                        "review_status": str(row.get("ReviewStatus", "")).strip(),
-                        "stars": stars,
-                        "grch38_pos": row["Start"],
-                        "ref": cds_ref,  # CDS-oriented for alignment
-                        "alt": cds_alt,  # CDS-oriented for alignment
-                        "genomic_ref": vcf_ref,  # Genomic for MyVariant lookup
-                        "genomic_alt": vcf_alt,
-                    }
-                )
-
-        df_clean = pd.DataFrame(clean_variants).drop_duplicates(subset=["allele_id"])
-        return df_clean.to_dict("records")
-
-
 class MyVariantParser:
     def __init__(self, json_path: Path):
-        self.lookup = self._load(json_path)
+        with open(json_path, "r") as f:
+            self.lookup = {i["_id"]: i for i in json.load(f) if not i.get("notfound")}
 
-    def _load(self, json_path: Path) -> dict:
-        lookup = {}
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+    def _extract_float(self, value):
+        if isinstance(value, list):
+            return self._extract_float(value[0]) if value else 0.0
+        if isinstance(value, dict):
+            for k in ["score", "af", "value"]:
+                if k in value:
+                    return self._extract_float(value[k])
+            return 0.0
+        try:
+            return float(value)
+        except:
+            return 0.0
 
-        for item in data:
-            if item.get("notfound"):
-                continue
-
-            vid = item.get("_id")
-            if not vid:
-                continue
-
-            revel = 0.0
-            dbnsfp = item.get("dbnsfp", {})
-            if dbnsfp:
-                revel_score = dbnsfp.get("revel", {}).get("score", 0.0)
-                if isinstance(revel_score, list):
-                    revel_score = revel_score[0]
-                try:
-                    revel = float(revel_score)
-                except (ValueError, TypeError):
-                    pass
-
-            af = 0.0
-            gnomad = item.get("gnomad_exome", item.get("gnomad_genome", {}))
-            if gnomad:
-                af_val = gnomad.get("af", 0.0)
-                if isinstance(af_val, list):
-                    af_val = af_val[0]
-                try:
-                    af = float(af_val)
-                except (ValueError, TypeError):
-                    pass
-
-            lookup[vid] = {"revel": revel, "gnomad_af": af}
-        return lookup
-
-    def get_metrics(self, chrom: str, pos: int, ref: str, alt: str) -> tuple:
-        vid = f"chr{chrom}:g.{pos}{ref}>{alt}"
-        metrics = self.lookup.get(vid, {})
-        return metrics.get("revel", 0.0), metrics.get("gnomad_af", 0.0)
+    def get_metrics(self, chrom, pos, ref, alt):
+        item = self.lookup.get(f"chr{chrom}:g.{pos}{ref}>{alt}", {})
+        revel = self._extract_float(
+            item.get("dbnsfp", {}).get("revel", {}).get("score", 0.0)
+        )
+        af = self._extract_float(
+            item.get("gnomad_exome", item.get("gnomad_genome", {})).get("af", 0.0)
+        )
+        return revel, af

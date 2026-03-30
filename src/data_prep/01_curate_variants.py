@@ -3,7 +3,6 @@ import json
 from collections import Counter
 from pathlib import Path
 
-# Import consolidated utility classes
 from utils.parsers import (
     ClinvarParser,
     GeneReference,
@@ -18,13 +17,65 @@ from utils.utils import get_latest
 # ==== Path Resolution ====
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
+REF_DIR = DATA_DIR / "reference"
 CURATED_DIR = DATA_DIR / "annotations" / "curated"
 CURATED_DIR.mkdir(parents=True, exist_ok=True)
+
+# Single Source of Truth for coordinates
+UNIFIED_COORD_FILE = REF_DIR / "nucdna_gene_coordinates.tsv"
 
 # ==== Configuration ====
 APOGEE_LP = 0.716
 REVEL_PATHOGENIC_THRESHOLD = 0.75
 GNOMAD_MENDELIAN_CUTOFF = 0.01
+
+# Disease relevance filter for nucDNA variants.
+# Variants whose disease annotation contains at least one OXPHOS term are kept.
+# Variants with only non-OXPHOS disease terms are discarded regardless of tier.
+# Generic/unspecified terms ("not provided" etc.) are treated as neutral (kept).
+_OXPHOS_DISEASE_TERMS = {
+    "mitochondrial complex",
+    "leigh syndrome",
+    "melas",
+    "oxidative phosphorylation",
+    "respiratory chain",
+    "mitochondrial disease",
+    "mitochondrial myopathy",
+    "leber",
+    "narp",
+}
+_NON_OXPHOS_DISEASE_TERMS = {
+    "pheochromocytoma",
+    "paraganglioma",
+    "gastrointestinal stromal",
+    "hereditary cancer-predisposing",
+    "thyroid cancer",
+    "renal cell carcinoma",
+    "neuroblastoma",
+}
+_GENERIC_DISEASE_TERMS = {
+    "not provided",
+    "not specified",
+    "inborn genetic diseases",
+    "not classified",
+}
+
+
+def _is_oxphos_disease(disease: str) -> bool:
+    """Returns True if the disease string is relevant to OXPHOS.
+
+    Logic:
+      - Any OXPHOS keyword → keep (True)
+      - Generic/unspecified terms only → keep (True, benefit of the doubt)
+      - Only non-OXPHOS cancer/tumour terms → discard (False)
+    """
+    d = disease.lower()
+    if any(t in d for t in _OXPHOS_DISEASE_TERMS):
+        return True
+    if any(t in d for t in _NON_OXPHOS_DISEASE_TERMS):
+        return False
+    # Generic or unrecognised disease term — keep
+    return True
 
 
 def assign_mtdna_tier(variant: VariantAnnotation) -> str:
@@ -61,6 +112,10 @@ def assign_nucdna_tier(variant: VariantAnnotation) -> str:
     revel = variant.pathogenic_score or 0.0
     af = variant.population_frequency or 0.0
 
+    # 0. Disease relevance filter — discard variants not linked to OXPHOS disorders
+    if not _is_oxphos_disease(variant.disease or ""):
+        return "Discarded"
+
     # 1. Population Sieve and Benign Filters (DISCARD)
     if af > GNOMAD_MENDELIAN_CUTOFF:
         return "Discarded"
@@ -93,23 +148,13 @@ def assign_nucdna_tier(variant: VariantAnnotation) -> str:
     return "Tier C"
 
 
-def save_outputs(annotations: list, prefix: str):
-    """Saves a variant list to JSON and CSV formats."""
-    out_json = CURATED_DIR / f"{prefix}_annotations_curated.json"
-    out_csv = CURATED_DIR / f"{prefix}_annotations_curated.csv"
-
-    with open(out_json, "w", encoding="utf-8") as f:
+def save_outputs(annotations: list, genome: str):
+    out_file = CURATED_DIR / f"{genome}_annotations_curated.json"
+    with open(out_file, "w", encoding="utf-8") as f:
         json.dump([ann.to_dict() for ann in annotations], f, indent=2)
-
-    if annotations:
-        with open(out_csv, "w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=annotations[0].to_dict().keys())
-            writer.writeheader()
-            writer.writerows([ann.to_dict() for ann in annotations])
 
 
 def main():
-    # ==== 1. Dynamically Resolve Input Paths ====
     print("Locating latest raw data files...")
     hgnc_file = get_latest(DATA_DIR, "Canonical_OXPHOS_Subunits_HGNC*.csv")
     mitomap_file = get_latest(DATA_DIR, "MITOMAP_CodingVariants*.tsv")
@@ -118,9 +163,11 @@ def main():
     clinvar_file = get_latest(DATA_DIR, "ClinVar_VariantSummary*.txt.gz")
     myvariant_file = get_latest(DATA_DIR, "MyVariant_dbNSFP_gnomAD*.json")
 
-    # ==== 2. Load Parsers & References ====
-    print("Loading databases and reference files into memory...")
+    print("Initializing Unified Gene Reference...")
     hgnc_ref = GeneReference(hgnc_file)
+    hgnc_ref.load_coordinates(UNIFIED_COORD_FILE)
+
+    print("Loading specialized parsers...")
     mitimpact_parser = MitimpactParser(mitimpact_file)
     phylotree_parser = PhylotreeParser(phylotree_file)
     myvariant_parser = MyVariantParser(myvariant_file)
@@ -131,7 +178,6 @@ def main():
     mt_stats = Counter()
     nuc_stats = Counter()
 
-    # ==== 3. Process Mitochondrial DNA ====
     print("\nProcessing mtDNA (MITOMAP) variants...")
     raw_mito_dicts = mitomap_parser.parse(mitomap_file)
     mt_annotations = []
@@ -144,7 +190,7 @@ def main():
             aa_change=d["aa_change"],
             is_synonymous=d["is_synonymous"],
             disease=d["disease"],
-            genome=d["genome"],
+            genome="mtDNA",
             reference_assembly="rCRS",
             clinical_status=d["clinical_status"],
             ref_nt=d["ref"],
@@ -168,15 +214,16 @@ def main():
         )
 
         variant.tier = assign_mtdna_tier(variant)
-        mt_stats[variant.tier.split(":")[0]] += 1
+        mt_stats[variant.tier] += 1
         mt_annotations.append(variant)
 
-    # ==== 4. Process Nuclear DNA ====
     print("Processing nucDNA (ClinVar) variants...")
     raw_nuc_dicts = clinvar_parser.parse(clinvar_file)
     nuc_annotations = []
 
     for d in raw_nuc_dicts:
+        gene_data = hgnc_ref.get_gene_data(d["locus"])
+
         variant = VariantAnnotation(
             ann_id=d["allele_id"],
             locus=d["locus"],
@@ -184,7 +231,7 @@ def main():
             aa_change=d["aa_change"],
             is_synonymous=d["is_synonymous"],
             disease=d["disease"],
-            genome=d["genome"],
+            genome="nucDNA",
             reference_assembly="GRCh38",
             clinical_status=d["clinical_status"],
             ref_nt=d["ref"],
@@ -196,12 +243,17 @@ def main():
             clinvar_review_status=d["review_status"],
         )
 
+        if gene_data and "strand" in gene_data:
+            variant.mitoclass = f"Strand: {gene_data['strand']}"
+
+        # No kwargs here, call sequentially to respect the method signature
         revel, af = myvariant_parser.get_metrics(
-            chrom=d["chromosome"],
-            pos=variant.genomic_pos,
-            ref=d.get("genomic_ref", variant.ref_nt),
-            alt=d.get("genomic_alt", variant.alt_nt),
+            d["chromosome"],
+            variant.genomic_pos,
+            d.get("genomic_ref", variant.ref_nt),
+            d.get("genomic_alt", variant.alt_nt),
         )
+
         variant.pathogenic_score = revel
         variant.population_frequency = af
 
@@ -209,25 +261,21 @@ def main():
         nuc_stats[variant.tier] += 1
         nuc_annotations.append(variant)
 
-    # ==== 5. Export Outputs ====
     print("\nSaving curated datasets...")
     save_outputs(mt_annotations, "mtDNA")
     save_outputs(nuc_annotations, "nucDNA")
 
-    # ==== 6. Print Summary ====
     print(f"\n{'='*50}")
     print("UNIFIED CURATION SUMMARY")
     print(f"{'='*50}")
 
     print(f"mtDNA Variants Processed: {len(mt_annotations)}")
     for tier, count in mt_stats.most_common():
-        print(f"  {tier:<20}: {count}")
+        print(f"  {tier:<12}: {count}")
 
     print(f"\nnucDNA Variants Processed: {len(nuc_annotations)}")
     for tier, count in nuc_stats.most_common():
-        print(f"  {tier:<20}: {count}")
-
-    print(f"\nTotal Output: {len(mt_annotations) + len(nuc_annotations)} variants.")
+        print(f"  {tier:<12}: {count}")
 
 
 if __name__ == "__main__":

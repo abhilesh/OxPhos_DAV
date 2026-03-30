@@ -1,161 +1,173 @@
-import re
 from pathlib import Path
 from Bio import SeqIO
+from collections import defaultdict
 
 
 class AlignmentParser:
     def __init__(self, aa_fasta: Path, nt_fasta: Path, genome: str):
         self.genome = genome
-        self.transcript_id = None
         self.aa_alignment = self._load_fasta(aa_fasta)
         self.nt_alignment = self._load_fasta(nt_fasta)
 
-        # Identify the human reference sequence
         self.ref_header = self._identify_reference()
+        self.transcript_id = (
+            self.ref_header.split("|")[2]
+            if len(self.ref_header.split("|")) > 2
+            else "UNKNOWN"
+        )
 
-        # Build coordinate maps (Biological 1-indexed pos -> Alignment 0-indexed col)
-        if self.ref_header:
-            self.aa_map = self._build_coordinate_map(self.aa_alignment)
-            self.nt_map = self._build_coordinate_map(self.nt_alignment)
-        else:
-            self.aa_map = {}
-            self.nt_map = {}
+        # Maps biological positions to alignment column indices
+        self.aa_map = self._build_coordinate_map(self.aa_alignment[self.ref_header])
+        self.nt_map = self._build_coordinate_map(self.nt_alignment[self.ref_header])
 
-    def _load_alignment(self, fasta_path: Path) -> dict:
-        alignment = {}
-        with open(fasta_path, "r") as f:
-            header = None
-            seq = []
-            for line in f:
-                line = line.strip()
-                if line.startswith(">"):
-                    if header:
-                        alignment[header] = "".join(seq)
-
-                    # Parse the header. Example: >Homo_sapiens|hg38|ENST00000263623
-                    full_id = line[1:].split()[0]
-                    parts = full_id.split("|")
-
-                    # Keep the species name as the primary dictionary key
-                    header = parts[0]
-
-                    # Extract transcript ID from the human reference sequence
-                    if header == "Homo_sapiens" and len(parts) >= 3:
-                        self.transcript_id = parts[2]
-
-                    seq = []
-                else:
-                    seq.append(line)
-            if header:
-                alignment[header] = "".join(seq)
-        return alignment
-
-    def _load_fasta(self, fasta_path: Path) -> dict:
-        if not fasta_path.exists():
-            return {}
-        return {
-            record.id: str(record.seq).upper()
-            for record in SeqIO.parse(fasta_path, "fasta")
-        }
+    def _load_fasta(self, file_path: Path) -> dict:
+        seqs = {}
+        for record in SeqIO.parse(file_path, "fasta"):
+            # Ensure we keep the full header exactly as mapped in 03_sanitize_all_alignments.py
+            seqs[record.id] = str(record.seq).upper()
+        return seqs
 
     def _identify_reference(self) -> str:
-        """Finds the human anchor sequence depending on the database format."""
-        if not self.aa_alignment:
-            return None
+        # Match Homo_sapiens|9606| (taxon ID 9606 = modern human) to avoid
+        # accidentally selecting Homo_sapiens_neanderthalensis or other archaic humans
+        # that also start with "Homo_sapiens" but have different sequences.
+        for header in self.aa_alignment.keys():
+            if header.startswith("Homo_sapiens|9606"):
+                return header
+        # Fallback: any Homo_sapiens entry (e.g. TOGA alignments without taxon ID)
+        for header in self.aa_alignment.keys():
+            if header.startswith("Homo_sapiens"):
+                return header
+        raise ValueError("Human reference not found in alignment.")
 
-        # Look for the standardized human header we built
-        human_header = next(
-            (
-                h
-                for h in self.aa_alignment.keys()
-                if "Homo_sapiens" in h or "REFERENCE" in h
-            ),
-            None,
-        )
-        if human_header:
-            return human_header
-
-        # Fallback for un-standardized files
-        return list(self.aa_alignment.keys())[0]
-
-    def _build_coordinate_map(self, alignment: dict) -> dict:
-        """Maps biological position (ignoring gaps) to the alignment column matrix."""
+    def _build_coordinate_map(self, ref_seq: str) -> dict:
         coord_map = {}
-        biological_pos = 1
-        ref_seq = alignment.get(self.ref_header, "")
-
-        for col_index, char in enumerate(ref_seq):
+        bio_pos = 1
+        for col_idx, char in enumerate(ref_seq):
             if char != "-":
-                coord_map[biological_pos] = col_index
-                biological_pos += 1
-
+                coord_map[bio_pos] = col_idx
+                bio_pos += 1
         return coord_map
 
-    def extract_mutant_codon(self, nt_pos: int, alt_allele: str) -> str:
-        """Determines the exact 3-letter mutant codon created by the variant."""
+    def find_sequence_anchor(self, aa_pos: int, expected_ref_aa: str) -> int:
+        """
+        Dynamically corrects transcript/isoform shifts by searching the
+        alignment for the expected amino acid context.
+        """
+        ref_seq = self.aa_alignment[self.ref_header]
+
+        # 1. Try strict coordinate first
+        if aa_pos in self.aa_map:
+            col = self.aa_map[aa_pos]
+            if ref_seq[col] == expected_ref_aa:
+                return aa_pos
+
+        # 2. Sliding window search for isoform offsets
+        search_window = 10
+        start_search = max(1, aa_pos - search_window)
+        end_search = aa_pos + search_window
+
+        for i in range(start_search, end_search + 1):
+            if i in self.aa_map:
+                col = self.aa_map[i]
+                if ref_seq[col] == expected_ref_aa:
+                    return i
+
+        return None  # Unrecoverable mismatch
+
+    def extract_mutant_codon(self, nt_pos: int, alt_nt: str) -> str:
+        """
+        Constructs the expected mutant codon by injecting the alt nucleotide
+        into the correct reading frame of the reference sequence.
+        """
         if nt_pos not in self.nt_map:
             return None
 
-        col_idx = self.nt_map[nt_pos]
+        # Snap to the correct codon reading frame (1-indexed)
+        frame_offset = (nt_pos - 1) % 3
+        codon_start_pos = nt_pos - frame_offset
 
-        # Calculate codon boundaries (0, 1, or 2 positions back from the mutation)
-        # Because we built the map ignoring gaps, we have to look at the raw biological reading frame
-        codon_start_bio = nt_pos - ((nt_pos - 1) % 3)
+        # Verify all 3 bases of the codon exist in the map
+        for i in range(3):
+            if (codon_start_pos + i) not in self.nt_map:
+                return None
 
-        if codon_start_bio not in self.nt_map:
-            return None
+        ref_seq = self.nt_alignment[self.ref_header]
+        codon_bases = [
+            ref_seq[self.nt_map[codon_start_pos]],
+            ref_seq[self.nt_map[codon_start_pos + 1]],
+            ref_seq[self.nt_map[codon_start_pos + 2]],
+        ]
 
-        col_start = self.nt_map[codon_start_bio]
+        # Inject the mutant base at the exact offset
+        codon_bases[frame_offset] = alt_nt.upper()
 
-        # Extract the wildtype codon from the alignment
-        wt_codon = self.nt_alignment[self.ref_header][col_start : col_start + 3]
-
-        # Inject the mutation
-        pos_in_codon = (nt_pos - 1) % 3
-        mut_codon = wt_codon[:pos_in_codon] + alt_allele + wt_codon[pos_in_codon + 1 :]
-
-        return mut_codon
+        return "".join(codon_bases)
 
     def check_compensation(
-        self, aa_pos: int, mut_aa: str, nt_pos: int, mut_codon: str
+        self, reported_aa_pos: int, wt_aa: str, mut_aa: str, nt_pos: int, mut_codon: str
     ) -> dict:
-        """Scans the mammalian tree for AA and NT level compensation."""
-        result = {
+        """Evaluates c-DARs using sequence-anchored coordinates.
+
+        wt_aa: the wild-type amino acid from the variant record (used as anchor).
+               This is the authoritative source — do NOT derive it from the alignment,
+               because MACSE alignments may start partway into the CDS (coordinate offset).
+        """
+        results = {
             "aa_cdar": False,
             "nt_cdar": False,
             "aa_species": [],
             "nt_species": [],
         }
 
-        if aa_pos not in self.aa_map or nt_pos not in self.nt_map:
-            return result
+        true_aa_pos = self.find_sequence_anchor(reported_aa_pos, wt_aa)
 
-        aa_col = self.aa_map[aa_pos]
-        nt_col_start = self.nt_map[nt_pos - ((nt_pos - 1) % 3)]  # Start of the codon
+        if not true_aa_pos:
+            return results
+
+        aa_col = self.aa_map[true_aa_pos]
+
+        # If the anchor shifted the AA position, shift the NT position by the same amount
+        # (MACSE alignments may start partway into the CDS, creating a constant offset)
+        aa_shift = true_aa_pos - reported_aa_pos
+        corrected_nt_pos = nt_pos + aa_shift * 3
+
+        # Snap nucleotide positions to the correct reading frame
+        frame_offset = (corrected_nt_pos - 1) % 3
+        codon_start_pos = corrected_nt_pos - frame_offset
+
+        nt_cols = [
+            self.nt_map.get(codon_start_pos),
+            self.nt_map.get(codon_start_pos + 1),
+            self.nt_map.get(codon_start_pos + 2),
+        ]
+
+        if None in nt_cols:
+            return results
 
         for species, aa_seq in self.aa_alignment.items():
             if species == self.ref_header:
                 continue
 
-            species_aa = aa_seq[aa_col]
-            species_codon = self.nt_alignment[species][nt_col_start : nt_col_start + 3]
-
-            # Skip missing data masks (CRITICAL: Includes MACSE '!' frameshift masks)
-            if (
-                species_aa in ["X", "-", "?", "!"]
-                or "N" in species_codon
-                or "!" in species_codon
+            # Skip gap, frameshift (!), stop (*), and uncertain (X) positions
+            _MASK = {"-", "!", "*", "X"}
+            if aa_seq[aa_col] in _MASK or any(
+                self.nt_alignment[species][c] in _MASK for c in nt_cols
             ):
                 continue
 
-            # Check AA level
-            if species_aa == mut_aa:
-                result["aa_cdar"] = True
-                result["aa_species"].append(species)
+            # AA Level Check
+            if aa_seq[aa_col] == mut_aa:
+                results["aa_cdar"] = True
+                sp_name = species.split("|")[0]
+                results["aa_species"].append(sp_name)
 
-            # Check NT level
-            if species_codon == mut_codon:
-                result["nt_cdar"] = True
-                result["nt_species"].append(species)
+                # NT Level Check (Strict subset of AA check)
+                species_codon = "".join(
+                    [self.nt_alignment[species][c] for c in nt_cols]
+                )
+                if species_codon == mut_codon:
+                    results["nt_cdar"] = True
+                    results["nt_species"].append(sp_name)
 
-        return result
+        return results

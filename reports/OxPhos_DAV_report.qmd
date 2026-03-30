@@ -47,5 +47,5 @@ mtDNA variant information
 
 nucDNA variant information
 
-- [gnomAD](https://gnomad.broadinstitute.org/) (`v4.1`): Population allele frequencies and gene-level constraint metrics (pLI, LOEUF, missense oe, missense z-score) for nuclear genes
-- [dbNSFP](https://www.dbnsfp.org/) ()
+- [gnomAD](https://gnomad.broadinstitute.org/) (`v3.1.1`): Population allele frequencies and gene-level constraint metrics (pLI, LOEUF, missense oe, missense z-score) for nuclear genes
+- [dbNSFP](https://www.dbnsfp.org/) (`v4.2a`)

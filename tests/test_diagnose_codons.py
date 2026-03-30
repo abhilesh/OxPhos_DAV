@@ -1,24 +1,94 @@
+"""
+NT-Level Codon Diagnostic — mtDNA and nucDNA
+=============================================
+For each genome, samples up to N_SAMPLE variants that have an AA-level c-DAR
+and performs the Triangle of Truth: inject alt_nt into the WT codon extracted
+from the alignment, translate, and verify it matches the expected alt_aa.
+
+Prints a per-variant trace so coordinate or allele mismatches are immediately
+visible.
+
+Run from project root:
+    python tests/test_diagnose_codons.py
+"""
+
+import csv
 import json
 import re
-from pathlib import Path
-from Bio.Seq import Seq
 import sys
+from pathlib import Path
+
+from Bio.Seq import Seq
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from utils.alignment_parser import AlignmentParser
 
 # ==== Configuration ====
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(ROOT))  # Ensure we can import src modules
+CURATED_DIR   = ROOT / "data" / "annotations" / "curated"
+MT_JSON       = CURATED_DIR / "cdar_classifications_mtDNA.json"
+NUC_JSON      = CURATED_DIR / "cdar_classifications_nucDNA.json"
 
-from src.utils.alignment_parser import AlignmentParser
+TOGA_AA_DIR   = ROOT / "data" / "alignments" / "toga_hg38_aa"
+TOGA_NT_DIR   = ROOT / "data" / "alignments" / "toga_hg38_codon"
+MT_AA_DIR     = ROOT / "data" / "alignments" / "mtdna_aa"
+MT_NT_DIR     = ROOT / "data" / "alignments" / "mtdna_codon"
+MT_COORD_FILE = ROOT / "data" / "reference" / "mtdna_gene_coordinates.tsv"
 
-DATA_DIR = ROOT / "data"
-# Use the output from your previous run so we can target known AA c-DARs
-IN_JSON = DATA_DIR / "annotations" / "curated" / "cdar_classifications_nucDNA.json"
+N_SAMPLE = 20  # variants to diagnose per genome
 
-TOGA_AA_DIR = DATA_DIR / "alignments" / "toga_hg38_aa"
-TOGA_NT_DIR = DATA_DIR / "alignments" / "toga_hg38_codon"
+
+# ==== Helpers ====
+
+def aa_dir(genome: str) -> Path:
+    return MT_AA_DIR if genome == "mtDNA" else TOGA_AA_DIR
+
+
+def nt_dir(genome: str) -> Path:
+    return MT_NT_DIR if genome == "mtDNA" else TOGA_NT_DIR
+
+
+_MT_ALIAS = {"MT-COX1": "MT-CO1", "MT-COX2": "MT-CO2", "MT-COX3": "MT-CO3", "MT-CYTB": "MT-CYB"}
+
+
+def _load_mt_coords() -> dict:
+    """Returns {gene: (start, end, strand)} from mtdna_gene_coordinates.tsv."""
+    coords = {}
+    if not MT_COORD_FILE.exists():
+        return coords
+    with open(MT_COORD_FILE) as f:
+        for row in csv.DictReader(f, delimiter="\t"):
+            start, end = int(row["start"]), int(row["end"])
+            entry = (min(start, end), max(start, end), row["strand"])
+            coords[row["gene"]] = entry
+            if row["gene"] in _MT_ALIAS:
+                coords[_MT_ALIAS[row["gene"]]] = entry
+    return coords
+
+
+MT_COORDS = _load_mt_coords()
+
+
+def _genomic_to_cds(genomic_pos: int, locus: str) -> int | None:
+    """Converts a rCRS genomic position to a 1-indexed CDS position."""
+    if locus not in MT_COORDS:
+        return None
+    start, end, strand = MT_COORDS[locus]
+    if strand == "+":
+        return genomic_pos - start + 1
+    else:
+        return end - genomic_pos + 1
 
 
 def parse_variant_coordinates(variant: dict) -> tuple:
+    """Returns (aa_pos, wt_aa, mut_aa, nt_pos).
+
+    For mtDNA: derives the exact CDS position from the genomic position stored
+    in the variant, which correctly handles second- and third-base mutations.
+    For nucDNA: uses the c. CDS coordinate from nc_change.
+    Fallback: (aa_pos * 3) - 2  — always the first base of the codon.
+    """
     aa_str = variant.get("aa_change", "")
     nc_str = variant.get("nc_change", "")
 
@@ -26,96 +96,127 @@ def parse_variant_coordinates(variant: dict) -> tuple:
     if not aa_match:
         return None, None, None, None
 
-    wt_aa = aa_match.group(1)
+    wt_aa  = aa_match.group(1)
     aa_pos = int(aa_match.group(2))
     mut_aa = aa_match.group(3)
 
-    nt_pos = None
-    if variant["genome"] == "nucDNA":
+    # nucDNA: exact CDS position from c. notation
+    if variant.get("genome") == "nucDNA":
         nc_match = re.search(r"c\.(\d+)", nc_str)
         if nc_match:
-            nt_pos = int(nc_match.group(1))
+            return aa_pos, wt_aa, mut_aa, int(nc_match.group(1))
 
-    if not nt_pos:
-        nt_pos = (aa_pos * 3) - 2
+    # mtDNA: derive exact CDS position from genomic coordinate
+    genomic_pos = variant.get("genomic_pos")
+    locus       = variant.get("locus", "").split("/")[0]
+    if genomic_pos and locus:
+        cds_pos = _genomic_to_cds(genomic_pos, locus)
+        if cds_pos:
+            return aa_pos, wt_aa, mut_aa, cds_pos
 
-    return aa_pos, wt_aa, mut_aa, nt_pos
+    # Final fallback — first base of the codon only
+    return aa_pos, wt_aa, mut_aa, (aa_pos * 3) - 2
 
 
-def main():
-    print("Initializing NT-Level Diagnostic Engine...\n")
+def diagnose_genome(json_path: Path, genome: str):
+    if not json_path.exists():
+        print(f"  {json_path.name} not found — run 00_classify_DAV.py first.\n")
+        return
 
-    with open(IN_JSON, "r") as f:
+    with open(json_path) as f:
         variants = json.load(f)
 
-    tested = 0
-    loaded_alignments = {}
+    candidates = [v for v in variants if v.get("cdar_aa")]
+    print(f"Loaded {len(variants)} variants, {len(candidates)} with AA c-DARs.")
 
-    for var in variants:
-        if tested >= 20:
+    loaded = {}
+    tested = passed = failed = skipped = 0
+
+    for var in candidates:
+        if tested >= N_SAMPLE:
             break
-
-        # Only test nucDNA variants that we KNOW have AA compensation
-        if var.get("genome") != "nucDNA" or not var.get("cdar_aa"):
-            continue
 
         locus = var["locus"].split("/")[0]
         aa_pos, wt_aa, mut_aa, nt_pos = parse_variant_coordinates(var)
-
-        if not aa_pos or not nt_pos:
+        if not aa_pos:
+            skipped += 1
             continue
 
-        if locus not in loaded_alignments:
-            aa_path = TOGA_AA_DIR / f"{locus}_aa_alignment.fasta"
-            nt_path = TOGA_NT_DIR / f"{locus}_codon_alignment.fasta"
-            if not aa_path.exists() or not nt_path.exists():
-                continue
-            loaded_alignments[locus] = AlignmentParser(aa_path, nt_path, "nucDNA")
+        aa_path = aa_dir(genome) / f"{locus}_aa_alignment.fasta"
+        nt_path = nt_dir(genome) / f"{locus}_codon_alignment.fasta"
 
-        parser = loaded_alignments[locus]
+        if locus not in loaded:
+            if aa_path.exists() and nt_path.exists():
+                loaded[locus] = AlignmentParser(aa_path, nt_path, genome)
+            else:
+                loaded[locus] = None
 
-        # --- THE DIAGNOSTIC EXTRACTION ---
-        if nt_pos not in parser.nt_map:
+        parser = loaded[locus]
+        if not parser:
+            skipped += 1
             continue
 
-        col_idx = parser.nt_map[nt_pos]
-        codon_start_bio = nt_pos - ((nt_pos - 1) % 3)
-        col_start = parser.nt_map[codon_start_bio]
+        # Use find_sequence_anchor to correct for alignment start offsets (e.g. MACSE)
+        true_aa_pos = parser.find_sequence_anchor(aa_pos, wt_aa)
+        if true_aa_pos is None:
+            skipped += 1
+            continue
 
-        # 1. Extract WT Codon
-        wt_codon = parser.nt_alignment[parser.ref_header][col_start : col_start + 3]
+        # Shift nt_pos by the same amount as the AA anchor correction
+        aa_shift    = true_aa_pos - aa_pos
+        nt_pos_corr = nt_pos + aa_shift * 3
 
-        # 2. Get the ALT allele directly from your JSON
-        alt_allele = var.get("alt_nt", "MISSING")
+        if nt_pos_corr not in parser.nt_map:
+            skipped += 1
+            continue
 
-        # 3. Fabricate Mutant Codon
-        pos_in_codon = (nt_pos - 1) % 3
-        mut_codon = wt_codon[:pos_in_codon] + alt_allele + wt_codon[pos_in_codon + 1 :]
+        # Extract WT codon from alignment using anchor-corrected position
+        codon_start_bio = nt_pos_corr - ((nt_pos_corr - 1) % 3)
+        col_start       = parser.nt_map[codon_start_bio]
+        wt_codon        = parser.nt_alignment[parser.ref_header][col_start: col_start + 3]
 
-        # 4. Perform the Triangle of Truth Translations
+        alt_nt       = var.get("alt_nt", "MISSING")
+        pos_in_codon = (nt_pos_corr - 1) % 3
+        mut_codon    = wt_codon[:pos_in_codon] + alt_nt + wt_codon[pos_in_codon + 1:]
+
+        _table = 2 if genome == "mtDNA" else 1
         try:
-            translated_wt = str(Seq(wt_codon).translate())
-            translated_mut = str(Seq(mut_codon).translate())
+            translated_wt  = str(Seq(wt_codon).translate(table=_table))
+            translated_mut = str(Seq(mut_codon).translate(table=_table))
         except Exception:
-            translated_wt = "ERR"
-            translated_mut = "ERR"
+            translated_wt = translated_mut = "ERR"
 
-        print(f"{'='*50}")
-        print(f"VARIANT: {locus} {var.get('nc_change')} ({var.get('aa_change')})")
-        print(f"JSON 'alt_nt' value : '{alt_allele}'")
-        print(f"-" * 50)
-        print(
-            f"Alignment WT Codon  : {wt_codon} -> Translates to: {translated_wt} (Expected: {wt_aa})"
-        )
+        alt_aa   = var.get("alt_aa") or mut_aa
+        is_pass  = translated_mut == alt_aa
+        wt_pass  = translated_wt  == wt_aa
 
-        # The ultimate check:
-        translation_match = "PASS" if translated_mut == mut_aa else "FAIL"
-        print(
-            f"Fabricated Mut Codon: {mut_codon} -> Translates to: {translated_mut} (Expected: {mut_aa})"
-        )
-        print(f"Triangle of Truth   : {translation_match}")
+        if is_pass:
+            passed += 1
+        else:
+            failed += 1
 
         tested += 1
+        status  = "PASS" if is_pass else "FAIL"
+        wt_flag = "" if wt_pass else "  [WT MISMATCH]"
+
+        print(f"{'='*55}")
+        print(f"[{status}] {locus}  {var.get('nc_change','')}  ({var.get('aa_change','')})")
+        print(f"  alt_nt       : '{alt_nt}'")
+        print(f"  WT  codon    : {wt_codon} → {translated_wt}  (expected {wt_aa}){wt_flag}")
+        print(f"  Mut codon    : {mut_codon} → {translated_mut}  (expected {alt_aa})")
+        if not is_pass:
+            print(f"  *** Triangle of Truth FAILED ***")
+
+    print(f"\n{'─'*55}")
+    print(f"{genome} — tested={tested}  pass={passed}  fail={failed}  skipped={skipped}")
+
+
+def main():
+    for genome, path in [("mtDNA", MT_JSON), ("nucDNA", NUC_JSON)]:
+        print(f"\n{'#'*55}")
+        print(f"  {genome} Codon Diagnostic  (up to {N_SAMPLE} c-DARs)")
+        print(f"{'#'*55}\n")
+        diagnose_genome(path, genome)
 
 
 if __name__ == "__main__":
