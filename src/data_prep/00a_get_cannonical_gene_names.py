@@ -16,7 +16,10 @@ today = date.today().isoformat()
 # Paths
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
-GENE_LIST = DATA_DIR / f"Canonical_OXPHOS_Subunits_HGNC_{today}.csv"
+REF_DIR = DATA_DIR / "reference"
+
+REF_DIR.mkdir(parents=True, exist_ok=True)
+GENE_LIST = REF_DIR / f"Canonical_OXPHOS_Subunits_HGNC_{today}.csv"
 
 
 def fetch_hgnc_group_genes(group_id, output_path):

@@ -1,9 +1,16 @@
 import csv
 import time
 from pathlib import Path
+from datetime import date
 from Bio import Entrez
 
+from utils.parsers import GeneReference
+from utils.utils import get_latest
+
 # ==== Configuration ====
+# Get today's date for metadata
+today = date.today().isoformat()
+
 Entrez.email = "abhilesh7@gmail.com"
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -12,8 +19,8 @@ REF_DIR = DATA_DIR / "reference"
 REF_DIR.mkdir(parents=True, exist_ok=True)
 
 # Path to your specific HGNC file snippet
-HGNC_FILE = list(DATA_DIR.glob("Canonical_OXPHOS_Subunits_HGNC*.csv"))[0]
-OUT_TSV = REF_DIR / "reference_gene_coordinates.tsv"
+HGNC_FILE = get_latest(REF_DIR, "Canonical_OXPHOS_Subunits_HGNC*.csv")
+OUT_TSV = REF_DIR / f"reference_gene_coordinates{today}.tsv"
 
 
 def fetch_gene_metadata(symbol):

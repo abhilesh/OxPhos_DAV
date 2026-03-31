@@ -209,6 +209,9 @@ class ClinvarParser:
                 aa_change, is_syn = self._parse_protein(row["Name"])
                 if not aa_change or "X" in aa_change:
                     continue
+                _aa_m = re.match(r"^([A-Z])(\d+)([A-Z])$", aa_change)
+                ref_aa = _aa_m.group(1) if _aa_m else ""
+                alt_aa = _aa_m.group(3) if _aa_m else ""
 
                 review = str(row.get("ReviewStatus", "")).strip()
                 r = review.lower()
@@ -231,6 +234,8 @@ class ClinvarParser:
                         "allele_id": str(row["VariationID"]),
                         "nt_change": str(row["Name"]),
                         "aa_change": aa_change,
+                        "ref_aa": ref_aa,
+                        "alt_aa": alt_aa,
                         "is_synonymous": is_syn,
                         "disease": str(row.get("PhenotypeList", "")),
                         "clinical_status": str(row.get("ClinicalSignificance", "")),

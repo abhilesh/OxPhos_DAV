@@ -9,10 +9,12 @@ WORKDIR /app
 # Install Python packages and bioinformatics tools via conda
 RUN conda install -y -c conda-forge -c bioconda \
     python=3.11 \
+    pytest \
     lxml \
     pandas \
     numpy \
     biopython \
+    scipy \
     requests \
     macse \
     iqtree \
