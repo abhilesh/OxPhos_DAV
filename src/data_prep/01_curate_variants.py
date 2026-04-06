@@ -156,7 +156,7 @@ def save_outputs(annotations: list, genome: str):
 
 def main():
     print("Locating latest raw data files...")
-    hgnc_file = get_latest(DATA_DIR, "Canonical_OXPHOS_Subunits_HGNC*.csv")
+    hgnc_file = get_latest(REF_DIR, "Canonical_OXPHOS_Subunits_HGNC*.csv")
     mitomap_file = get_latest(DATA_DIR, "MITOMAP_CodingVariants*.tsv")
     mitimpact_file = get_latest(DATA_DIR, "MitImpact_db*.zip")
     phylotree_file = get_latest(DATA_DIR, "PhyloTree_build_17*.zip")

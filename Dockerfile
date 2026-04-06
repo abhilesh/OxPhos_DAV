@@ -1,13 +1,12 @@
 FROM continuumio/miniconda3:latest
 
-# Prevent Python from writing pyc files and enable unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install Python packages and bioinformatics tools via conda
-RUN conda install -y -c conda-forge -c bioconda \
+# 1. Create the environment
+RUN conda create -y -n oxphos_dav --solver=libmamba -c conda-forge -c bioconda -c defaults \
     python=3.11 \
     pytest \
     lxml \
@@ -20,11 +19,16 @@ RUN conda install -y -c conda-forge -c bioconda \
     iqtree \
     && conda clean -afy
 
-# Copy setup.py and src directory into the container's build context
+# 2. Force Docker to use this environment for all subsequent RUN commands during the build
+SHELL ["conda", "run", "-n", "oxphos_dav", "/bin/bash", "-c"]
+
 COPY setup.py /app/
 COPY src /app/src/
 
-# Install project as an editable Python package
+# 3. Pip install now strictly targets oxphos_dav
 RUN pip install --no-cache-dir -e .
 
-CMD ["bash"]
+# 4. CRITICAL FIX: Append the activation command to .bashrc to override Miniconda's default behavior
+RUN echo "conda activate oxphos_dav" >> ~/.bashrc
+
+CMD ["/bin/bash"]
