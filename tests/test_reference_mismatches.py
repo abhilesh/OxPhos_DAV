@@ -8,7 +8,7 @@ from utils.alignment_parser import AlignmentParser
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 CURATED_DIR = DATA_DIR / "annotations" / "curated"
-MT_JSON = CURATED_DIR / "cdar_classifications_mtDNA.json"
+MT_JSON = CURATED_DIR / "cdav_classifications_mtDNA.json"
 
 MT_AA_DIR = DATA_DIR / "alignments" / "mtdna_aa"
 MT_NT_DIR = DATA_DIR / "alignments" / "mtdna_codon"

@@ -6,7 +6,7 @@ for BOTH mtDNA and nucDNA datasets:
 
   Layer 1 — Triangle of Truth        : codon injection + translation self-check
   Layer 2 — Species Claim Validation : direct alignment re-scan for each c-DAR call
-  Layer 3 — NT ⊆ AA Consistency      : cdar_nt=True must imply cdar_aa=True
+  Layer 3 — NT ⊆ AA Consistency      : is_cdav_nucleotide=True must imply is_cdav_amino_acid=True
   Layer 4 — Ref Allele Mismatch Audit: informational mismatch rate report
 
 Layers 1 and 2 use random sampling over multiple trials for robust coverage.
@@ -33,8 +33,8 @@ from utils.alignment_parser import AlignmentParser
 
 # ==== Configuration ====
 CURATED_DIR  = ROOT / "data" / "annotations" / "curated"
-MT_JSON      = CURATED_DIR / "cdar_classifications_mtDNA.json"
-NUC_JSON     = CURATED_DIR / "cdar_classifications_nucDNA.json"
+MT_JSON      = CURATED_DIR / "cdav_classifications_mtDNA.json"
+NUC_JSON     = CURATED_DIR / "cdav_classifications_nucDNA.json"
 
 TOGA_AA_DIR  = ROOT / "data" / "alignments" / "toga_hg38_aa"
 TOGA_NT_DIR  = ROOT / "data" / "alignments" / "toga_hg38_codon"
@@ -147,7 +147,7 @@ def _print_trial_bar(trial_results: list, n_eligible: int):
 def _build_layer1_eligible(variants: list, genome: str, cache: dict) -> list:
     eligible = []
     for var in variants:
-        if not var.get("cdar_aa"):
+        if not var.get("is_cdav_amino_acid"):
             continue
         locus = var["locus"].split("/")[0]
         aa_pos, wt_aa, mut_aa, nt_pos = parse_variant_coordinates(var)
@@ -235,7 +235,7 @@ def layer1_triangle_of_truth(variants: list, genome: str, cache: dict) -> bool:
 def _build_layer2a_eligible(variants: list, genome: str, cache: dict) -> list:
     eligible = []
     for var in variants:
-        if not var.get("cdar_aa") or not var.get("cdar_aa_species"):
+        if not var.get("is_cdav_amino_acid") or not var.get("lineages_with_disease_allele"):
             continue
         locus = var["locus"].split("/")[0]
         aa_pos, wt_aa, mut_aa, _ = parse_variant_coordinates(var)
@@ -251,7 +251,7 @@ def _build_layer2a_eligible(variants: list, genome: str, cache: dict) -> list:
 def _build_layer2b_eligible(variants: list, genome: str, cache: dict) -> list:
     eligible = []
     for var in variants:
-        if var.get("cdar_aa") or not var.get("ref_allele_match"):
+        if var.get("is_cdav_amino_acid") or not var.get("ref_allele_match"):
             continue
         locus = var["locus"].split("/")[0]
         aa_pos, wt_aa, mut_aa, _ = parse_variant_coordinates(var)
@@ -273,7 +273,7 @@ def _run_layer2a_trial(sample: list, genome: str, cache: dict) -> tuple:
         aa_col = parser.aa_map[aa_pos]
         variant_ok = True
 
-        for species in var["cdar_aa_species"]:
+        for species in var["lineages_with_disease_allele"]:
             sp_seq = parser.aa_alignment.get(species)
             if sp_seq is None:
                 continue
@@ -321,7 +321,7 @@ def layer2_species_claim_validation(variants: list, genome: str, cache: dict) ->
     print(f"{N_TRIALS} trials × {SAMPLE_SIZE} random variants per part.\n")
 
     # --- Part A: c-DAR species re-scan ---
-    print(f"Part A — Verify cdar_aa_species claims (c-DARs):")
+    print(f"Part A — Verify lineages_with_disease_allele claims (cDAVs):")
     eligible_a = _build_layer2a_eligible(variants, genome, cache)
 
     a_trial_results = []
@@ -371,13 +371,13 @@ def layer3_nt_subset_aa_consistency(variants: list, genome: str) -> bool:
     print(f"\n{'='*60}")
     print(f"LAYER 3: NT ⊆ AA Logical Consistency  [{genome}]")
     print(f"{'='*60}")
-    print("Rule: cdar_nt=True must imply cdar_aa=True for every variant.\n")
+    print("Rule: is_cdav_nucleotide=True must imply is_cdav_amino_acid=True for every variant.\n")
 
     expected_violations = []
     genuine_violations  = []
 
     for var in variants:
-        if var.get("cdar_nt") and not var.get("cdar_aa"):
+        if var.get("is_cdav_nucleotide") and not var.get("is_cdav_amino_acid"):
             bucket = expected_violations if not var.get("ref_allele_match") else genuine_violations
             bucket.append(var)
 
@@ -389,7 +389,7 @@ def layer3_nt_subset_aa_consistency(variants: list, genome: str) -> bool:
         for v in genuine_violations[:10]:
             print(
                 f"    {v['locus']:10s} {v.get('nc_change','?'):15s} ({v.get('aa_change','?'):8s})"
-                f"  nt_species={v.get('cdar_nt_species', [])[:3]}"
+                f"  nt_species={v.get('lineages_with_disease_allele', [])[:3]}"
             )
 
     if len(genuine_violations) <= LAYER3_KNOWN_VIOLATIONS:

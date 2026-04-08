@@ -27,8 +27,8 @@ from utils.alignment_parser import AlignmentParser
 
 # ==== Configuration ====
 CURATED_DIR   = ROOT / "data" / "annotations" / "curated"
-MT_JSON       = CURATED_DIR / "cdar_classifications_mtDNA.json"
-NUC_JSON      = CURATED_DIR / "cdar_classifications_nucDNA.json"
+MT_JSON       = CURATED_DIR / "cdav_classifications_mtDNA.json"
+NUC_JSON      = CURATED_DIR / "cdav_classifications_nucDNA.json"
 
 TOGA_AA_DIR   = ROOT / "data" / "alignments" / "toga_hg38_aa"
 TOGA_NT_DIR   = ROOT / "data" / "alignments" / "toga_hg38_codon"
@@ -126,8 +126,8 @@ def diagnose_genome(json_path: Path, genome: str):
     with open(json_path) as f:
         variants = json.load(f)
 
-    candidates = [v for v in variants if v.get("cdar_aa")]
-    print(f"Loaded {len(variants)} variants, {len(candidates)} with AA c-DARs.")
+    candidates = [v for v in variants if v.get("is_cdav_amino_acid")]
+    print(f"Loaded {len(variants)} variants, {len(candidates)} with AA cDAVs.")
 
     loaded = {}
     tested = passed = failed = skipped = 0
