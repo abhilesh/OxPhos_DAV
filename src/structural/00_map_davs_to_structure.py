@@ -19,8 +19,8 @@ outside the high-scoring core).  After mapping, ref_aa is verified against
 the PDB residue; a ±10 AA sliding window corrects for isoform offsets.
 
 Input:
-  data/annotations/curated/cdar_classifications_mtDNA.json
-  data/annotations/curated/cdar_classifications_nucDNA.json
+  data/annotations/curated/cdav_classifications_mtDNA.json
+  data/annotations/curated/cdav_classifications_nucDNA.json
   data/structures/{PDB_ID}.cif
   data/Homo_sapiens_OXPHOS_seqs/Homo_sapiens_OXPHOS_mtDNA.fasta
   data/Homo_sapiens_OXPHOS_seqs/Homo_sapiens_OXPHOS_nucDNA.fasta
@@ -53,8 +53,8 @@ from Bio.PDB import MMCIFParser, NeighborSearch, is_aa
 ROOT = Path("/app")
 STRUC_DIR = ROOT / "data" / "structures"
 CURATED_DIR = ROOT / "data" / "annotations" / "curated"
-MT_JSON = CURATED_DIR / "cdar_classifications_mtDNA.json"
-NUC_JSON = CURATED_DIR / "cdar_classifications_nucDNA.json"
+MT_JSON = CURATED_DIR / "cdav_classifications_mtDNA.json"
+NUC_JSON = CURATED_DIR / "cdav_classifications_nucDNA.json"
 TOGA_AA_DIR = ROOT / "data" / "alignments" / "toga_hg38_aa"
 MT_AA_DIR   = ROOT / "data" / "alignments" / "mtdna_aa"
 OUT_DIR = ROOT / "results" / "structural"
@@ -506,10 +506,10 @@ def main():
                     "aa_change": r.get("aa_change", ""),
                     "ref_aa": r.get("ref_aa", ""),
                     "alt_aa": r.get("alt_aa", ""),
-                    "cdar_aa": r.get("cdar_aa", False),
-                    "cdar_nt": r.get("cdar_nt", False),
-                    "compensating_species_count": r.get(
-                        "compensating_species_count", 0
+                    "is_cdav_amino_acid": r.get("is_cdav_amino_acid", False),
+                    "is_cdav_nucleotide": r.get("is_cdav_nucleotide", False),
+                    "n_species_with_disease_allele": r.get(
+                        "n_species_with_disease_allele", 0
                     ),
                     "aa_coord": aa_coord,
                 }
@@ -726,9 +726,9 @@ def main():
                     "dar_locus": gene,
                     "dar_genome": dar["genome"],
                     "tier": dar["tier"],
-                    "cdar_aa": dar["cdar_aa"],
-                    "cdar_nt": dar["cdar_nt"],
-                    "compensating_species_count": dar["compensating_species_count"],
+                    "is_cdav_amino_acid": dar["is_cdav_amino_acid"],
+                    "is_cdav_nucleotide": dar["is_cdav_nucleotide"],
+                    "n_species_with_disease_allele": dar["n_species_with_disease_allele"],
                     "dar_aa_coord": aa_coord,
                     "dar_ref_aa": ref_aa,
                     "dar_alt_aa": dar["alt_aa"],
@@ -753,8 +753,8 @@ def main():
         "locus",
         "genome",
         "tier",
-        "cdar_aa",
-        "cdar_nt",
+        "is_cdav_amino_acid",
+        "is_cdav_nucleotide",
         "aa_coord",
         "ref_aa",
         "alt_aa",
@@ -778,9 +778,9 @@ def main():
         "dar_locus",
         "dar_genome",
         "tier",
-        "cdar_aa",
-        "cdar_nt",
-        "compensating_species_count",
+        "is_cdav_amino_acid",
+        "is_cdav_nucleotide",
+        "n_species_with_disease_allele",
         "dar_aa_coord",
         "dar_ref_aa",
         "dar_alt_aa",
@@ -850,7 +850,7 @@ def main():
         for r in map_rows
         if r["ann_id"] in iface_dars
         and (r["status"] == "ok" or r.get("status", "").startswith("ok(") or r.get("status", "").startswith("isoform"))
-        and r.get("cdar_aa")
+        and r.get("is_cdav_amino_acid")
     )
     print(
         f"\nDARs at mito↔nuc interface : {len(iface_dars):,} total, "

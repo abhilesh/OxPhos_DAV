@@ -14,9 +14,9 @@ DATA_DIR = ROOT / "data"
 CURATED_DIR = DATA_DIR / "annotations" / "curated"
 LOG_DIR = DATA_DIR / "logs"
 
-# Input: v2 curated records from 02_curate_variants.py
-MT_CURATED = CURATED_DIR / "mtDNA_annotations_v2.json"
-NUC_CURATED = CURATED_DIR / "nucDNA_annotations_v2.json"
+# Input: curated records from 01_curate_variants.py
+MT_CURATED = CURATED_DIR / "mtDNA_annotations.json"
+NUC_CURATED = CURATED_DIR / "nucDNA_annotations.json"
 
 # Alignment Directories
 TOGA_AA_DIR = DATA_DIR / "alignments" / "toga_hg38_aa"

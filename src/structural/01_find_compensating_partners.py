@@ -7,7 +7,7 @@ contacting residues show co-evolutionary enrichment in the species that carry
 the disease amino acid.
 
 Logic:
-  - cDAR species   : those listed in var["cdar_aa_species"] — they carry the
+  - cDAR species   : those listed in var["lineages_with_disease_allele"] — they carry the
                      human-pathogenic AA as wild-type.
   - Background     : all other species in the alignment that have a readable AA
                      at the DAR position (not gap / X / ! / *).
@@ -48,8 +48,8 @@ from scipy.stats import fisher_exact
 # ── Paths ──────────────────────────────────────────────────────────────────────
 ROOT        = Path(__file__).resolve().parents[2]
 CURATED_DIR = ROOT / "data" / "annotations" / "curated"
-MT_JSON     = CURATED_DIR / "cdar_classifications_mtDNA.json"
-NUC_JSON    = CURATED_DIR / "cdar_classifications_nucDNA.json"
+MT_JSON     = CURATED_DIR / "cdav_classifications_mtDNA.json"
+NUC_JSON    = CURATED_DIR / "cdav_classifications_nucDNA.json"
 CONTACTS    = ROOT / "results" / "structural" / "dar_contacts_cbcb8A.csv"
 TOGA_AA_DIR = ROOT / "data" / "alignments" / "toga_hg38_aa"
 MT_AA_DIR   = ROOT / "data" / "alignments" / "mtdna_aa"
@@ -139,7 +139,7 @@ def main():
             tier = var.get("tier", "")
             if "Discarded" in tier:
                 continue
-            if not var.get("cdar_aa"):
+            if not var.get("is_cdav_amino_acid"):
                 continue
             cdars[var["ann_id"]] = var
 
@@ -181,7 +181,7 @@ def main():
         var          = cdars[ann_id]
         dar_gene     = var["locus"].split("/")[0]
         tier         = var["tier"]
-        cdar_spp     = set(var.get("cdar_aa_species", []))
+        cdar_spp     = set(var.get("lineages_with_disease_allele", []))
         dar_aa_coord = int(dar_contacts[0]["dar_aa_coord"])
 
         if dar_gene not in alns:

@@ -165,7 +165,7 @@ def main():
 
     # Load ClinVar NM_ per gene from curated data
     nm_per_gene: dict[str, str] = {}
-    nuc_curated = CURATED_DIR / "nucDNA_annotations_v2.json"
+    nuc_curated = CURATED_DIR / "nucDNA_annotations.json"
     if nuc_curated.exists():
         nm_counts: dict[str, Counter] = defaultdict(Counter)
         with open(nuc_curated) as f:

@@ -1,161 +1,66 @@
-import csv
+#!/usr/bin/env python3
+"""
+src/data_prep/01_curate_variants.py
+
+Rich-schema data collection for OXPHOS disease-associated variants.
+This script assembles all available evidence into VariantRecord objects.
+Tier assignment is NOT done here — it is left as "Unassigned" for the
+classification step (src/classify/00_classify_DAV.py).
+
+Produces:
+  data/annotations/curated/mtDNA_annotations.json
+  data/annotations/curated/nucDNA_annotations.json
+
+Each record is a VariantRecord with:
+  - Full provenance (source DB, version, record ID)
+  - Disaggregated clinical evidence (submitter count, last evaluated, etc.)
+  - HGVS c. / p. strings and transcript ID (extracted from Name field)
+  - Computational predictors (REVEL, PhyloP, GERP++, AlphaMissense, ESM1b, MPC)
+  - gnomAD population data (AF global, popmax, AC, AN, nhomalt)
+  - Substitution properties (BLOSUM62, Miyata distance, charge/volume/hydrophobicity)
+  - Gene context (complex, subunit role, encoded_by, is_sdh)
+  - Reserved structural + cross-species slots (None; populated by later steps)
+  - tier: "Unassigned" (populated by classification step)
+
+Run from project root inside the Docker container:
+  python src/data_prep/01_curate_variants.py
+"""
+
 import json
-from collections import Counter
 from pathlib import Path
 
+
 from utils.parsers import (
-    ClinvarParser,
-    GeneReference,
-    MitimpactParser,
-    MitomapParser,
-    MyVariantParser,
-    PhylotreeParser,
-    VariantAnnotation,
+    GeneReference, MitimpactParser, PhylotreeParser,
+    MitomapParser, ClinvarParser, MyVariantParser,
 )
 from utils.utils import get_latest
+from utils.variant_record import VariantRecord
 
-# ==== Path Resolution ====
+# ── Paths ──────────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
 REF_DIR = DATA_DIR / "reference"
 CURATED_DIR = DATA_DIR / "annotations" / "curated"
 CURATED_DIR.mkdir(parents=True, exist_ok=True)
-
-# Single Source of Truth for coordinates
 UNIFIED_COORD_FILE = REF_DIR / "nucdna_gene_coordinates.tsv"
 
-# ==== Configuration ====
-APOGEE_LP = 0.716
-REVEL_PATHOGENIC_THRESHOLD = 0.75
-GNOMAD_MENDELIAN_CUTOFF = 0.01
 
-# Disease relevance filter for nucDNA variants.
-# Variants whose disease annotation contains at least one OXPHOS term are kept.
-# Variants with only non-OXPHOS disease terms are discarded regardless of tier.
-# Generic/unspecified terms ("not provided" etc.) are treated as neutral (kept).
-_OXPHOS_DISEASE_TERMS = {
-    "mitochondrial complex",
-    "leigh syndrome",
-    "melas",
-    "oxidative phosphorylation",
-    "respiratory chain",
-    "mitochondrial disease",
-    "mitochondrial myopathy",
-    "leber",
-    "narp",
-}
-_NON_OXPHOS_DISEASE_TERMS = {
-    "pheochromocytoma",
-    "paraganglioma",
-    "gastrointestinal stromal",
-    "hereditary cancer-predisposing",
-    "thyroid cancer",
-    "renal cell carcinoma",
-    "neuroblastoma",
-}
-_GENERIC_DISEASE_TERMS = {
-    "not provided",
-    "not specified",
-    "inborn genetic diseases",
-    "not classified",
-}
+# ── Saving ─────────────────────────────────────────────────────────────────────
 
 
-def _is_oxphos_disease(disease: str) -> bool:
-    """Returns True if the disease string is relevant to OXPHOS.
-
-    Logic:
-      - Any OXPHOS keyword → keep (True)
-      - Generic/unspecified terms only → keep (True, benefit of the doubt)
-      - Only non-OXPHOS cancer/tumour terms → discard (False)
-    """
-    d = disease.lower()
-    if any(t in d for t in _OXPHOS_DISEASE_TERMS):
-        return True
-    if any(t in d for t in _NON_OXPHOS_DISEASE_TERMS):
-        return False
-    # Generic or unrecognised disease term — keep
-    return True
+def save_outputs(records: list[VariantRecord], genome: str) -> None:
+    out = CURATED_DIR / f"{genome}_annotations.json"
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump([r.to_dict() for r in records], f, indent=2)
+    print(f"  Saved {len(records)} records → {out}")
 
 
-def assign_mtdna_tier(variant: VariantAnnotation) -> str:
-    """Implements a strict 3-tier mitochondrial disease decision tree."""
-    status = variant.clinical_status.lower()
-    apogee = variant.pathogenic_score
-
-    # 1. Confirmed Pathogenic ALWAYS trumps haplogroup status
-    if "cfrm [p]" in status or "cfrm [lp]" in status:
-        return "Tier A"
-
-    # 2. Haplogroup / Benign Sieves
-    if variant.is_haplogroup_marker:
-        return "Discarded"
-    if "benign" in status or "[lb]" in status or "[b]" in status:
-        return "Discarded"
-
-    # 3. Moderate Evidence / Predicted Pathogenic
-    is_high_apogee = apogee is not None and apogee >= APOGEE_LP
-
-    if "cfrm [vus*]" in status:
-        return "Tier B"
-    if ("reported" in status or "conflicting" in status) and is_high_apogee:
-        return "Tier B"
-
-    # 4. Low Evidence / Unconfirmed VUS
-    return "Tier C"
-
-
-def assign_nucdna_tier(variant: VariantAnnotation) -> str:
-    """Implements a strict 3-tier nuclear disease decision tree mirroring mtDNA."""
-    status = variant.clinical_status.lower()
-    stars = variant.clinvar_stars or 0
-    revel = variant.pathogenic_score or 0.0
-    af = variant.population_frequency or 0.0
-
-    # 0. Disease relevance filter — discard variants not linked to OXPHOS disorders
-    if not _is_oxphos_disease(variant.disease or ""):
-        return "Discarded"
-
-    # 1. Population Sieve and Benign Filters (DISCARD)
-    if af > GNOMAD_MENDELIAN_CUTOFF:
-        return "Discarded"
-
-    if "benign" in status and "pathogenic" not in status:
-        return "Discarded"
-
-    # Identify variants that are Pathogenic/LP without conflicts
-    is_pathogenic = "pathogenic" in status and "conflicting" not in status
-    is_high_revel = revel >= REVEL_PATHOGENIC_THRESHOLD
-
-    # 2. Strong Evidence / Confirmed (Tier A)
-    if is_pathogenic and stars >= 2:
-        return "Tier A"
-
-    # 3. Moderate Evidence / Predicted Pathogenic (Tier B)
-    if is_pathogenic and stars == 1:
-        return "Tier B"
-
-    if (
-        "uncertain" in status
-        or "vus" in status
-        or "conflicting" in status
-        or stars == 0
-    ):
-        if is_high_revel:
-            return "Tier B"
-
-    # 4. Low Evidence / Unconfirmed VUS (Tier C)
-    return "Tier C"
-
-
-def save_outputs(annotations: list, genome: str):
-    out_file = CURATED_DIR / f"{genome}_annotations_curated.json"
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump([ann.to_dict() for ann in annotations], f, indent=2)
+# ── Main ───────────────────────────────────────────────────────────────────────
 
 
 def main():
-    print("Locating latest raw data files...")
+    print("Locating raw data files...")
     hgnc_file = get_latest(REF_DIR, "Canonical_OXPHOS_Subunits_HGNC*.csv")
     mitomap_file = get_latest(DATA_DIR, "MITOMAP_CodingVariants*.tsv")
     mitimpact_file = get_latest(DATA_DIR, "MitImpact_db*.zip")
@@ -163,119 +68,175 @@ def main():
     clinvar_file = get_latest(DATA_DIR, "ClinVar_VariantSummary*.txt.gz")
     myvariant_file = get_latest(DATA_DIR, "MyVariant_dbNSFP_gnomAD*.json")
 
-    print("Initializing Unified Gene Reference...")
+    print("Initializing gene reference...")
     hgnc_ref = GeneReference(hgnc_file)
     hgnc_ref.load_coordinates(UNIFIED_COORD_FILE)
 
-    print("Loading specialized parsers...")
-    mitimpact_parser = MitimpactParser(mitimpact_file)
-    phylotree_parser = PhylotreeParser(phylotree_file)
-    myvariant_parser = MyVariantParser(myvariant_file)
+    print("Loading parsers...")
+    mitimpact = MitimpactParser(mitimpact_file)
+    phylotree = PhylotreeParser(phylotree_file)
+    myvariant = MyVariantParser(myvariant_file)
+    mitomap_p = MitomapParser(hgnc_ref)
+    clinvar_p = ClinvarParser(hgnc_ref)
 
-    mitomap_parser = MitomapParser(hgnc_reference=hgnc_ref)
-    clinvar_parser = ClinvarParser(hgnc_reference=hgnc_ref)
-
-    mt_stats = Counter()
-    nuc_stats = Counter()
-
+    # ── mtDNA ──────────────────────────────────────────────────────────────────
     print("\nProcessing mtDNA (MITOMAP) variants...")
-    raw_mito_dicts = mitomap_parser.parse(mitomap_file)
-    mt_annotations = []
+    mt_records: list[VariantRecord] = []
 
-    for d in raw_mito_dicts:
-        variant = VariantAnnotation(
+    for d in mitomap_p.parse(mitomap_file):
+        pos = d["rCRS_pos"]
+        apogee, mitoclass = mitimpact.get_metrics(
+            pos, d.get("genomic_ref", d["ref"]), d.get("genomic_alt", d["alt"])
+        )
+        is_haplo = phylotree.is_haplogroup(
+            pos, d.get("genomic_ref", d["ref"]), d.get("genomic_alt", d["alt"])
+        )
+
+        rec = VariantRecord(
+            # Identity
             ann_id=d["nt_change"],
+            source_db=d["source_db"],
+            source_db_version=d["source_db_version"],
+            source_record_id=d["source_record_id"],
+            genome="mtDNA",
+            reference_assembly="rCRS",
+            # Coordinates
             locus=d["locus"],
             nc_change=d["nt_change"],
             aa_change=d["aa_change"],
-            is_synonymous=d["is_synonymous"],
-            disease=d["disease"],
-            genome="mtDNA",
-            reference_assembly="rCRS",
-            clinical_status=d["clinical_status"],
             ref_nt=d["ref"],
             alt_nt=d["alt"],
             ref_aa=d.get("ref_aa", ""),
             alt_aa=d.get("alt_aa", ""),
-            genomic_pos=d["rCRS_pos"],
+            genomic_pos=pos,
+            is_synonymous=d["is_synonymous"],
+            hgvs_c=d.get("hgvs_c", ""),
+            # Clinical
+            disease=d["disease"],
+            disease_terms=[t.strip() for t in d["disease"].split("|") if t.strip()],
+            clinical_status=d["clinical_status"],
+            mitomap_plasmy=d.get("mitomap_plasmy", ""),
+            mitomap_pubmed_count=d.get("mitomap_pubmed_count", 0),
+            is_haplogroup_marker=is_haplo,
+            # Predictors
+            apogee2_score=apogee,
+            mitoclass=mitoclass or "",
         )
+        rec.populate_gene_context()
+        rec.populate_substitution_properties()
+        mt_records.append(rec)
 
-        apogee, mitoclass = mitimpact_parser.get_metrics(
-            variant.genomic_pos,
-            d.get("genomic_ref", variant.ref_nt),
-            d.get("genomic_alt", variant.alt_nt),
-        )
-        variant.pathogenic_score = apogee
-        variant.mitoclass = mitoclass
-        variant.is_haplogroup_marker = phylotree_parser.is_haplogroup(
-            variant.genomic_pos,
-            d.get("genomic_ref", variant.ref_nt),
-            d.get("genomic_alt", variant.alt_nt),
-        )
-
-        variant.tier = assign_mtdna_tier(variant)
-        mt_stats[variant.tier] += 1
-        mt_annotations.append(variant)
-
+    # ── nucDNA ─────────────────────────────────────────────────────────────────
     print("Processing nucDNA (ClinVar) variants...")
-    raw_nuc_dicts = clinvar_parser.parse(clinvar_file)
-    nuc_annotations = []
+    nuc_records: list[VariantRecord] = []
 
-    for d in raw_nuc_dicts:
+    for d in clinvar_p.parse(clinvar_file):
         gene_data = hgnc_ref.get_gene_data(d["locus"])
+        metrics = myvariant.get_all_metrics(
+            d["chromosome"],
+            d["grch38_pos"],
+            d.get("genomic_ref", d["ref"]),
+            d.get("genomic_alt", d["alt"]),
+        )
 
-        variant = VariantAnnotation(
+        rec = VariantRecord(
+            # Identity
             ann_id=d["allele_id"],
+            source_db=d["source_db"],
+            source_db_version=d["source_db_version"],
+            source_record_id=d["source_record_id"],
+            genome="nucDNA",
+            reference_assembly="GRCh38",
+            # Coordinates
             locus=d["locus"],
             nc_change=d["nt_change"],
             aa_change=d["aa_change"],
-            is_synonymous=d["is_synonymous"],
-            disease=d["disease"],
-            genome="nucDNA",
-            reference_assembly="GRCh38",
-            clinical_status=d["clinical_status"],
             ref_nt=d["ref"],
             alt_nt=d["alt"],
             ref_aa=d.get("ref_aa", ""),
             alt_aa=d.get("alt_aa", ""),
             genomic_pos=d["grch38_pos"],
+            is_synonymous=d["is_synonymous"],
+            hgvs_c=d.get("hgvs_c", ""),
+            hgvs_p=d.get("hgvs_p", ""),
+            transcript_id=d.get("transcript_id", ""),
+            # Clinical
+            disease=d["disease"],
+            disease_terms=d.get("disease_terms", []),
+            clinical_status=d["clinical_status"],
             clinvar_stars=d["stars"],
             clinvar_review_status=d["review_status"],
+            clinvar_submitters_n=d.get("clinvar_submitters_n", 0),
+            clinvar_last_evaluated=d.get("clinvar_last_evaluated", ""),
+            clinvar_conflicting=d.get("clinvar_conflicting", False),
+            # Computational predictors
+            revel_score=metrics.get("revel_score"),
+            phylop_100vert=metrics.get("phylop_100vert"),
+            gerp_rs=metrics.get("gerp_rs"),
+            alphamissense_score=metrics.get("alphamissense_score"),
+            alphamissense_class=metrics.get("alphamissense_class"),
+            esm1b_score=metrics.get("esm1b_score"),
+            mpc_score=metrics.get("mpc_score"),
+            # Population
+            gnomad_af_global=metrics.get("gnomad_af_global"),
+            gnomad_af_popmax=metrics.get("gnomad_af_popmax"),
+            gnomad_popmax_pop=metrics.get("gnomad_popmax_pop"),
+            gnomad_ac=metrics.get("gnomad_ac"),
+            gnomad_an=metrics.get("gnomad_an"),
+            gnomad_nhomalt=metrics.get("gnomad_nhomalt"),
         )
+        rec.populate_gene_context()
+        rec.populate_substitution_properties()
+        nuc_records.append(rec)
 
-        if gene_data and "strand" in gene_data:
-            variant.mitoclass = f"Strand: {gene_data['strand']}"
-
-        # No kwargs here, call sequentially to respect the method signature
-        revel, af = myvariant_parser.get_metrics(
-            d["chromosome"],
-            variant.genomic_pos,
-            d.get("genomic_ref", variant.ref_nt),
-            d.get("genomic_alt", variant.alt_nt),
-        )
-
-        variant.pathogenic_score = revel
-        variant.population_frequency = af
-
-        variant.tier = assign_nucdna_tier(variant)
-        nuc_stats[variant.tier] += 1
-        nuc_annotations.append(variant)
-
+    # ── Save ───────────────────────────────────────────────────────────────────
     print("\nSaving curated datasets...")
-    save_outputs(mt_annotations, "mtDNA")
-    save_outputs(nuc_annotations, "nucDNA")
+    save_outputs(mt_records, "mtDNA")
+    save_outputs(nuc_records, "nucDNA")
 
-    print(f"\n{'='*50}")
-    print("UNIFIED CURATION SUMMARY")
-    print(f"{'='*50}")
+    # ── Summary ────────────────────────────────────────────────────────────────
+    def _cov(records, field):
+        return sum(1 for r in records if getattr(r, field) is not None)
 
-    print(f"mtDNA Variants Processed: {len(mt_annotations)}")
-    for tier, count in mt_stats.most_common():
-        print(f"  {tier:<12}: {count}")
+    print(f"\n{'='*55}")
+    print("DATA COLLECTION SUMMARY")
+    print(f"{'='*55}")
+    print(f"  mtDNA variants  : {len(mt_records)}")
+    print(f"  nucDNA variants : {len(nuc_records)}")
+    print(f"\nField coverage (nucDNA, n={len(nuc_records)}):")
+    for fld in [
+        "hgvs_c",
+        "transcript_id",
+        "revel_score",
+        "alphamissense_score",
+        "alphamissense_class",
+        "esm1b_score",
+        "mpc_score",
+        "phylop_100vert",
+        "gerp_rs",
+        "gnomad_af_global",
+        "gnomad_af_popmax",
+        "gnomad_popmax_pop",
+        "gnomad_ac",
+        "gnomad_an",
+        "gnomad_nhomalt",
+        "miyata_distance",
+        "blosum62",
+        "complex_id",
+    ]:
+        n = _cov(nuc_records, fld)
+        print(f"  {fld:<30}: {n:>5}  ({100*n/len(nuc_records):.0f}%)")
 
-    print(f"\nnucDNA Variants Processed: {len(nuc_annotations)}")
-    for tier, count in nuc_stats.most_common():
-        print(f"  {tier:<12}: {count}")
+    print(f"\nField coverage (mtDNA, n={len(mt_records)}):")
+    for fld in [
+        "apogee2_score",
+        "mitoclass",
+        "miyata_distance",
+        "blosum62",
+        "complex_id",
+    ]:
+        n = _cov(mt_records, fld)
+        print(f"  {fld:<30}: {n:>5}  ({100*n/len(mt_records):.0f}%)")
 
 
 if __name__ == "__main__":

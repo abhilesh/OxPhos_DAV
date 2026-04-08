@@ -13,7 +13,7 @@ CDS as the NM_ used in our ClinVar records.
 
 1.  Download the NCBI MANE Select summary table (one canonical NM_ ↔ ENST pair
     per gene; the pair is guaranteed to share the same CDS coordinates).
-2.  Load `nucDNA_annotations_v2.json` (if present) to find the NM_ actually used
+2.  Load `nucDNA_annotations.json` (if present) to find the NM_ actually used
     for each gene in our dataset.
 3.  Build a gene → preferred ENST map from NM_ via MANE.
 4.  When choosing which TOGA file to download for a gene, prefer the ENST that
@@ -55,7 +55,7 @@ MANE_URL = "https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/current/MANE.GRC
 
 OVERVIEW_FILE = REF_DIR / f"TOGA_overview_table_hg38_{today}.tsv"
 MANE_FILE = REF_DIR / "MANE_GRCh38_v1.5.txt.gz"
-NUC_CURATED = CURATED_DIR / "nucDNA_annotations_v2.json"
+NUC_CURATED = CURATED_DIR / "nucDNA_annotations.json"
 
 # Disable SSL verification for academic servers
 ctx = ssl.create_default_context()
@@ -144,7 +144,7 @@ def get_clinvar_nm_per_gene() -> dict:
     Returns {gene_symbol: NM_base}.
     """
     if not NUC_CURATED.exists():
-        print("  nucDNA_annotations_v2.json not found; skipping NM_ pre-selection.")
+        print("  nucDNA_annotations.json not found; skipping NM_ pre-selection.")
         return {}
 
     nm_counts: dict[str, Counter] = defaultdict(Counter)
