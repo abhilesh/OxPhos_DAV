@@ -260,8 +260,7 @@ class TestAlignmentParser:
     def test_mask_X_filtered_from_aa_cdar(self, aa_fasta, nt_fasta):
         """Species_3 has X at position 2 and must not be counted as a c-DAR."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
-        mut_codon = parser.extract_mutant_codon(5, "A")  # TTC→TAC = Tyr
-        result = parser.check_compensation(2, "F", "Y", 5, mut_codon)
+        result = parser.check_compensation(2, "F", "Y", 5, "A")
         species_found = result["aa_species"]
         assert not any("Species_3" in s for s in species_found), (
             "Species with X in AA must be filtered from c-DAR species list"
@@ -270,8 +269,7 @@ class TestAlignmentParser:
     def test_mask_frameshift_filtered_from_aa_cdar(self, aa_fasta, nt_fasta):
         """Species_4 has ! at position 2 (frameshift) and must not be counted."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
-        mut_codon = parser.extract_mutant_codon(5, "A")
-        result = parser.check_compensation(2, "F", "Y", 5, mut_codon)
+        result = parser.check_compensation(2, "F", "Y", 5, "A")
         assert not any("Species_4" in s for s in result["aa_species"]), (
             "Frameshifted species (!) must be filtered from c-DAR species list"
         )
@@ -279,8 +277,7 @@ class TestAlignmentParser:
     def test_mask_stop_filtered_from_aa_cdar(self, aa_fasta, nt_fasta):
         """Species_5 has * at position 2 (stop codon) and must not be counted."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
-        mut_codon = parser.extract_mutant_codon(5, "A")
-        result = parser.check_compensation(2, "F", "Y", 5, mut_codon)
+        result = parser.check_compensation(2, "F", "Y", 5, "A")
         assert not any("Species_5" in s for s in result["aa_species"]), (
             "Stop-codon species (*) must be filtered from c-DAR species list"
         )
@@ -288,28 +285,28 @@ class TestAlignmentParser:
     def test_valid_cdar_species_counted(self, aa_fasta, nt_fasta):
         """Species_2 has Y at position 2 with codon TAC — must be an AA and NT c-DAR."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
-        mut_codon = parser.extract_mutant_codon(5, "A")  # TAC = Tyr
-        result = parser.check_compensation(2, "F", "Y", 5, mut_codon)
+        result = parser.check_compensation(2, "F", "Y", 5, "A")  # TTC→TAC = Tyr
         assert result["aa_cdar"] is True
         assert any("Species_2" in s for s in result["aa_species"])
         assert result["nt_cdar"] is True
         assert any("Species_2" in s for s in result["nt_species"])
 
+    def test_check_compensation_returns_mut_codon(self, aa_fasta, nt_fasta):
+        """check_compensation must return the mutant codon it built internally."""
+        parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
+        result = parser.check_compensation(2, "F", "Y", 5, "A")
+        assert result["mut_codon"] == "TAC"
+
     def test_ref_species_not_counted(self, aa_fasta, nt_fasta):
         """Species_1 has the same AA as human ref — not a c-DAR."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
-        mut_codon = parser.extract_mutant_codon(5, "A")
-        result = parser.check_compensation(2, "F", "F", 5, mut_codon)
-        # mut_aa = 'F' but human already has F — only Species_1 has F,
-        # and it's not the ref_header, but F == ref AA so it IS counted.
-        # More important: Species_1 should appear but human should NOT.
+        result = parser.check_compensation(2, "F", "F", 5, "A")
         assert not any("Homo_sapiens" in s for s in result["aa_species"])
 
     def test_nt_cdar_is_subset_of_aa_cdar(self, aa_fasta, nt_fasta):
         """NT c-DAR species must be a subset of AA c-DAR species."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
-        mut_codon = parser.extract_mutant_codon(5, "A")
-        result = parser.check_compensation(2, "F", "Y", 5, mut_codon)
+        result = parser.check_compensation(2, "F", "Y", 5, "A")
         assert set(result["nt_species"]).issubset(set(result["aa_species"])), (
             "NT c-DAR species must be a strict subset of AA c-DAR species"
         )

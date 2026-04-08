@@ -25,8 +25,8 @@ SHELL ["conda", "run", "-n", "oxphos_dav", "/bin/bash", "-c"]
 COPY setup.py /app/
 COPY src /app/src/
 
-# 3. Pip install now strictly targets oxphos_dav
-RUN pip install --no-cache-dir -e .
+# 3. Install pip dependencies, including the local package and aaindex
+RUN pip install --no-cache-dir -e . aaindex
 
 # 4. CRITICAL FIX: Append the activation command to .bashrc to override Miniconda's default behavior
 RUN echo "conda activate oxphos_dav" >> ~/.bashrc

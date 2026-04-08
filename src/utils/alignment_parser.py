@@ -4,21 +4,36 @@ from collections import defaultdict
 
 
 class AlignmentParser:
-    def __init__(self, aa_fasta: Path, nt_fasta: Path, genome: str):
+    def __init__(self, aa_fasta: Path, nt_fasta: Path, genome: str,
+                 tx_pos_map: dict | None = None):
+        """
+        aa_fasta, nt_fasta : TOGA alignment files for this gene.
+        genome             : "mtDNA" | "nucDNA"
+        tx_pos_map         : optional dict {nm_aa_pos (int): enst_aa_pos (int|None)}
+                             pre-built by 00f_build_transcript_position_maps.py.
+                             When provided, check_compensation uses it as a direct
+                             NM_→ENST position lookup instead of find_sequence_anchor.
+        """
         self.genome = genome
         self.aa_alignment = self._load_fasta(aa_fasta)
         self.nt_alignment = self._load_fasta(nt_fasta)
 
         self.ref_header = self._identify_reference()
-        self.transcript_id = (
-            self.ref_header.split("|")[2]
-            if len(self.ref_header.split("|")) > 2
-            else "UNKNOWN"
-        )
+        # Extract ENST from anywhere in the header (format varies between TOGA codon
+        # and AA alignments, but ENST always appears as a distinct "|"-separated field
+        # or as the first word in a field).  Fall back to "UNKNOWN" if absent.
+        import re as _re
+        _enst = _re.search(r"(ENST\d+)", self.ref_header)
+        self.transcript_id = _enst.group(1) if _enst else "UNKNOWN"
 
         # Maps biological positions to alignment column indices
         self.aa_map = self._build_coordinate_map(self.aa_alignment[self.ref_header])
         self.nt_map = self._build_coordinate_map(self.nt_alignment[self.ref_header])
+
+        # tx_pos_map: int keys (JSON stores them as str → convert on load)
+        self.tx_pos_map: dict[int, int | None] | None = (
+            {int(k): v for k, v in tx_pos_map.items()} if tx_pos_map else None
+        )
 
     def _load_fasta(self, file_path: Path) -> dict:
         seqs = {}
@@ -105,67 +120,113 @@ class AlignmentParser:
         return "".join(codon_bases)
 
     def check_compensation(
-        self, reported_aa_pos: int, wt_aa: str, mut_aa: str, nt_pos: int, mut_codon: str
+        self, reported_aa_pos: int, wt_aa: str, mut_aa: str, nt_pos: int, alt_nt: str
     ) -> dict:
-        """Evaluates c-DARs using sequence-anchored coordinates.
+        """Evaluates cDAVs using sequence-anchored coordinates.
 
-        wt_aa: the wild-type amino acid from the variant record (used as anchor).
-               This is the authoritative source — do NOT derive it from the alignment,
-               because MACSE alignments may start partway into the CDS (coordinate offset).
+        Codon construction happens *after* anchor correction, so it uses the
+        TOGA-aligned position rather than the raw ClinVar c. coordinate (which
+        is in NM_ space; the alignment may use a different ENST isoform).
+
+        wt_aa: wild-type AA from the variant record — used as the positional
+               anchor. Do NOT derive from the alignment; TOGA alignments may
+               start partway into the CDS.
+
+        Returns a dict with:
+            aa_cdar          bool        mutant AA found in ≥1 non-human species
+            nt_cdar          bool        mutant codon found in ≥1 non-human species
+            aa_species       list[str]   species names with AA cDAV
+            nt_species       list[str]   species names with NT cDAV
+            anchor_found     bool        False → wt_aa not in alignment within ±10 aa
+            mut_codon        str|None    mutant codon at corrected position; None if
+                                         corrected position is outside the alignment
+            ref_base_found   str         actual ref base at corrected position
+                                         ("ANCHOR_NOT_FOUND" or "POS_NOT_IN_MAP" on failure)
+            corrected_nt_pos int         NT position after anchor shift
         """
+        ref_seq = self.nt_alignment[self.ref_header]
+
         results = {
             "aa_cdar": False,
             "nt_cdar": False,
             "aa_species": [],
             "nt_species": [],
+            "anchor_found": False,
+            "position_not_in_enst": False,
+            "mut_codon": None,
+            "ref_base_found": "ANCHOR_NOT_FOUND",
+            "corrected_nt_pos": nt_pos,
         }
 
-        true_aa_pos = self.find_sequence_anchor(reported_aa_pos, wt_aa)
+        # ── Position resolution ───────────────────────────────────────────────
+        # Strategy 1 (preferred): global NM_→ENST map pre-built by
+        #   00f_build_transcript_position_maps.py.  Direct O(1) lookup; handles
+        #   large offsets and fully different N-termini.
+        # Strategy 2 (fallback): local ±10-residue sequence anchor search.
+        #   Used when no map is available (mtDNA, genes not yet in the map file).
+        if self.tx_pos_map is not None:
+            enst_aa_pos = self.tx_pos_map.get(reported_aa_pos)
+            if enst_aa_pos is None:
+                # Position exists only in NM_ isoform (aligns to a gap in ENST)
+                results["position_not_in_enst"] = True
+                return results
+            true_aa_pos = enst_aa_pos
+        else:
+            true_aa_pos = self.find_sequence_anchor(reported_aa_pos, wt_aa)
+            if not true_aa_pos:
+                return results
 
-        if not true_aa_pos:
+        results["anchor_found"] = True
+        aa_col = self.aa_map.get(true_aa_pos)
+        if aa_col is None:
+            # Mapped ENST position is outside the alignment range
             return results
 
-        aa_col = self.aa_map[true_aa_pos]
-
-        # If the anchor shifted the AA position, shift the NT position by the same amount
-        # (MACSE alignments may start partway into the CDS, creating a constant offset)
+        # NT shift: same amount the AA position was corrected.
         aa_shift = true_aa_pos - reported_aa_pos
         corrected_nt_pos = nt_pos + aa_shift * 3
+        results["corrected_nt_pos"] = corrected_nt_pos
 
-        # Snap nucleotide positions to the correct reading frame
+        if corrected_nt_pos not in self.nt_map:
+            results["ref_base_found"] = "POS_NOT_IN_MAP"
+            return results
+
+        # Build mutant codon at the corrected position
         frame_offset = (corrected_nt_pos - 1) % 3
         codon_start_pos = corrected_nt_pos - frame_offset
-
         nt_cols = [
             self.nt_map.get(codon_start_pos),
             self.nt_map.get(codon_start_pos + 1),
             self.nt_map.get(codon_start_pos + 2),
         ]
-
         if None in nt_cols:
+            results["ref_base_found"] = "POS_NOT_IN_MAP"
             return results
 
+        ref_codon_bases = [ref_seq[c] for c in nt_cols]
+        results["ref_base_found"] = ref_codon_bases[frame_offset]  # base at exact nt_pos
+
+        mut_codon_bases = ref_codon_bases[:]
+        mut_codon_bases[frame_offset] = alt_nt.upper()
+        mut_codon = "".join(mut_codon_bases)
+        results["mut_codon"] = mut_codon
+
+        # Species scan
+        _MASK = {"-", "!", "*", "X"}
         for species, aa_seq in self.aa_alignment.items():
             if species == self.ref_header:
                 continue
-
-            # Skip gap, frameshift (!), stop (*), and uncertain (X) positions
-            _MASK = {"-", "!", "*", "X"}
             if aa_seq[aa_col] in _MASK or any(
                 self.nt_alignment[species][c] in _MASK for c in nt_cols
             ):
                 continue
 
-            # AA Level Check
             if aa_seq[aa_col] == mut_aa:
                 results["aa_cdar"] = True
                 sp_name = species.split("|")[0]
                 results["aa_species"].append(sp_name)
 
-                # NT Level Check (Strict subset of AA check)
-                species_codon = "".join(
-                    [self.nt_alignment[species][c] for c in nt_cols]
-                )
+                species_codon = "".join(self.nt_alignment[species][c] for c in nt_cols)
                 if species_codon == mut_codon:
                     results["nt_cdar"] = True
                     results["nt_species"].append(sp_name)
