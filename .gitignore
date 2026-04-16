@@ -8,4 +8,4 @@ __pycache__/
 *.py[cod]
 
 # macOS system files
-.DS_Store
+.DS_Store.worktrees/
