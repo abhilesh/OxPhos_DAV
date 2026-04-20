@@ -14,7 +14,7 @@ Covers:
     missing-data returns None, popmax calculation
   - VariantRecord helpers: populate_substitution_properties, populate_gene_context
   - AlignmentParser: mask character filtering (X, !, *, -), mutant codon extraction,
-    c-DAR detection counts
+    cDAV detection counts
 
 Run from project root:
     pytest tests/test_parsers.py -v
@@ -617,8 +617,8 @@ class TestVariantRecordGeneContext:
         r.populate_gene_context()
         assert r.subunit_role == "accessory"
 
-    def test_locus_slash_split(self):
-        r = _make_record(locus="MT-ND1/MTND1")
+    def test_interpreted_gene_preferred_over_composite_locus(self):
+        r = _make_record(locus="MT-ND1/MTND1", interpreted_gene="MT-ND1")
         r.populate_gene_context()
         assert r.complex_id == "CI"
 
@@ -631,8 +631,8 @@ def aa_fasta(tmp_path):
     """Minimal 3-residue AA alignment for testing mask character filtering.
 
     Human:     M F A
-    Species_1: M F A  (same as ref — never a c-DAR)
-    Species_2: M Y A  (Y ≠ F — c-DAR if mut_aa='Y')
+    Species_1: M F A  (same as ref — never a cDAV)
+    Species_2: M Y A  (Y ≠ F — cDAV if mut_aa='Y')
     Species_3: M X A  (X — uncertain, must be filtered)
     Species_4: M ! A  (! — frameshift marker, must be filtered)
     Species_5: M * A  (* — stop codon, must be filtered)
@@ -691,37 +691,37 @@ class TestAlignmentParser:
         codon = parser.extract_mutant_codon(5, "A")
         assert codon == "TAC"
 
-    def test_mask_X_filtered_from_aa_cdar(self, aa_fasta, nt_fasta):
-        """Species_3 has X at position 2 and must not be counted as a c-DAR."""
+    def test_mask_X_filtered_from_aa_cdav(self, aa_fasta, nt_fasta):
+        """Species_3 has X at position 2 and must not be counted as a cDAV."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
         result = parser.check_compensation(2, "F", "Y", 5, "A")
         assert not any("Species_3" in s for s in result["aa_species"]), (
-            "Species with X in AA must be filtered from c-DAR species list"
+            "Species with X in AA must be filtered from cDAV species list"
         )
 
-    def test_mask_frameshift_filtered_from_aa_cdar(self, aa_fasta, nt_fasta):
+    def test_mask_frameshift_filtered_from_aa_cdav(self, aa_fasta, nt_fasta):
         """Species_4 has ! at position 2 (frameshift) and must not be counted."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
         result = parser.check_compensation(2, "F", "Y", 5, "A")
         assert not any("Species_4" in s for s in result["aa_species"]), (
-            "Frameshifted species (!) must be filtered from c-DAR species list"
+            "Frameshifted species (!) must be filtered from cDAV species list"
         )
 
-    def test_mask_stop_filtered_from_aa_cdar(self, aa_fasta, nt_fasta):
+    def test_mask_stop_filtered_from_aa_cdav(self, aa_fasta, nt_fasta):
         """Species_5 has * at position 2 (stop codon) and must not be counted."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
         result = parser.check_compensation(2, "F", "Y", 5, "A")
         assert not any("Species_5" in s for s in result["aa_species"]), (
-            "Stop-codon species (*) must be filtered from c-DAR species list"
+            "Stop-codon species (*) must be filtered from cDAV species list"
         )
 
-    def test_valid_cdar_species_counted(self, aa_fasta, nt_fasta):
-        """Species_2 has Y at position 2 with codon TAC — must be an AA and NT c-DAR."""
+    def test_valid_cdav_species_counted(self, aa_fasta, nt_fasta):
+        """Species_2 has Y at position 2 with codon TAC — must be an AA and NT cDAV."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
         result = parser.check_compensation(2, "F", "Y", 5, "A")
-        assert result["aa_cdar"] is True
+        assert result["aa_cdav"] is True
         assert any("Species_2" in s for s in result["aa_species"])
-        assert result["nt_cdar"] is True
+        assert result["nt_cdav"] is True
         assert any("Species_2" in s for s in result["nt_species"])
 
     def test_check_compensation_returns_mut_codon(self, aa_fasta, nt_fasta):
@@ -731,15 +731,15 @@ class TestAlignmentParser:
         assert result["mut_codon"] == "TAC"
 
     def test_ref_species_not_counted(self, aa_fasta, nt_fasta):
-        """Species_1 has the same AA as human ref — not a c-DAR."""
+        """Species_1 has the same AA as human ref — not a cDAV."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
         result = parser.check_compensation(2, "F", "F", 5, "A")
         assert not any("Homo_sapiens" in s for s in result["aa_species"])
 
-    def test_nt_cdar_is_subset_of_aa_cdar(self, aa_fasta, nt_fasta):
-        """NT c-DAR species must be a subset of AA c-DAR species."""
+    def test_nt_cdav_is_subset_of_aa_cdav(self, aa_fasta, nt_fasta):
+        """NT cDAV species must be a subset of AA cDAV species."""
         parser = AlignmentParser(aa_fasta, nt_fasta, "nucDNA")
         result = parser.check_compensation(2, "F", "Y", 5, "A")
         assert set(result["nt_species"]).issubset(set(result["aa_species"])), (
-            "NT c-DAR species must be a strict subset of AA c-DAR species"
+            "NT cDAV species must be a strict subset of AA cDAV species"
         )
