@@ -1,0 +1,39 @@
+Bootstrap: docker
+From: continuumio/miniconda3:latest
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+    conda create -y -n oxphos_dav --solver=libmamba -c conda-forge -c bioconda -c defaults \
+        python=3.11 \
+        cxx-compiler \
+        pytest \
+        lxml \
+        pandas \
+        pyarrow \
+        numpy \
+        biopython \
+        scipy \
+        requests \
+        macse \
+        iqtree \
+        r-base \
+        r-ape \
+        r-phytools
+    . /opt/conda/etc/profile.d/conda.sh
+    conda activate oxphos_dav
+    pip install --no-cache-dir -e /opt/oxphos_dav aaindex
+    pip install --no-cache-dir pyvolve evcouplings
+    pip install --no-cache-dir --no-deps pydca
+    conda clean -afy
+
+%files
+    setup.py /opt/oxphos_dav/setup.py
+    src /opt/oxphos_dav/src
+
+%environment
+    export PATH=/opt/conda/envs/oxphos_dav/bin:$PATH
+    export PYTHONDONTWRITEBYTECODE=1
+    export PYTHONUNBUFFERED=1
+
+%runscript
+    exec /bin/bash "$@"

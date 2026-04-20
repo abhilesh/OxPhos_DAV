@@ -133,8 +133,8 @@ class AlignmentParser:
                start partway into the CDS.
 
         Returns a dict with:
-            aa_cdar          bool        mutant AA found in ≥1 non-human species
-            nt_cdar          bool        mutant codon found in ≥1 non-human species
+            aa_cdav          bool        mutant AA found in ≥1 non-human species
+            nt_cdav          bool        mutant codon found in ≥1 non-human species
             aa_species       list[str]   species names with AA cDAV
             nt_species       list[str]   species names with NT cDAV
             anchor_found     bool        False → wt_aa not in alignment within ±10 aa
@@ -147,8 +147,8 @@ class AlignmentParser:
         ref_seq = self.nt_alignment[self.ref_header]
 
         results = {
-            "aa_cdar": False,
-            "nt_cdar": False,
+            "aa_cdav": False,
+            "nt_cdav": False,
             "aa_species": [],
             "nt_species": [],
             "anchor_found": False,
@@ -222,13 +222,13 @@ class AlignmentParser:
                 continue
 
             if aa_seq[aa_col] == mut_aa:
-                results["aa_cdar"] = True
+                results["aa_cdav"] = True
                 sp_name = species.split("|")[0]
                 results["aa_species"].append(sp_name)
 
                 species_codon = "".join(self.nt_alignment[species][c] for c in nt_cols)
                 if species_codon == mut_codon:
-                    results["nt_cdar"] = True
+                    results["nt_cdav"] = True
                     results["nt_species"].append(sp_name)
 
         return results

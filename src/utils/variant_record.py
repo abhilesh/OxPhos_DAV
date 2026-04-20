@@ -342,6 +342,61 @@ class VariantRecord:
     hgvs_c: Optional[str] = None
     hgvs_p: Optional[str] = None
     transcript_id: Optional[str] = None  # transcript used for annotation
+    variant_id: Optional[str] = None
+    source_variant_group_id: Optional[str] = None
+    raw_record_id: Optional[str] = None
+    loci_raw: Optional[str] = None
+    interpreted_gene: Optional[str] = None
+    is_overlap: bool = False
+    overlap_group: Optional[str] = None
+    overlap_genes: list = field(default_factory=list)
+    overlap_role: Optional[str] = None
+    derived_from_overlap_duplication: bool = False
+    shared_source_variant_group_id: Optional[str] = None
+    frame_specific_hgvs_p: Optional[str] = None
+    frame_specific_ref_aa: Optional[str] = None
+    frame_specific_alt_aa: Optional[str] = None
+    frame_specific_is_synonymous: Optional[bool] = None
+    frame_specific_is_missense: Optional[bool] = None
+    frame_specific_codon_index: Optional[int] = None
+    frame_specific_coordinate_status: Optional[str] = None
+    coding_ref_nt: Optional[str] = None
+    coding_alt_nt: Optional[str] = None
+    genomic_ref_nt: Optional[str] = None
+    genomic_alt_nt: Optional[str] = None
+    cross_source_match_key_nt: Optional[str] = None
+    cross_source_duplicate_group_id: Optional[str] = None
+    cross_source_duplicate_status: Optional[str] = None
+    matched_in_clinvar: Optional[bool] = None
+    matched_in_mitomap: Optional[bool] = None
+    cross_source_partner_count: Optional[int] = None
+    cross_source_partner_variant_ids: list = field(default_factory=list)
+    cross_source_partner_sources: list = field(default_factory=list)
+    genomic_equals_ref_nt: Optional[bool] = None
+    genomic_equals_alt_nt: Optional[bool] = None
+    coordinate_resolution_method: Optional[str] = None
+    coordinate_resolution_status: Optional[str] = None
+    reference_allele_representation: Optional[str] = None
+    variant_class: Optional[str] = None
+    parse_status: Optional[str] = None
+    parse_failure_reason: Optional[str] = None
+    curation_status: Optional[str] = None
+    curation_notes: Optional[str] = None
+    eligible_core_comparative_pipeline: Optional[bool] = None
+    core_pipeline_exclusion_reason: Optional[str] = None
+    exception_scope: Optional[str] = None
+    exception_class: Optional[str] = None
+    exception_code: Optional[str] = None
+    exception_decision: Optional[str] = None
+    manual_review_status: Optional[str] = None
+    replacement_nm: Optional[str] = None
+    replacement_enst: Optional[str] = None
+    rescue_method: Optional[str] = None
+    exception_rationale: Optional[str] = None
+    exception_evidence_source: Optional[str] = None
+    exception_reviewed_by: Optional[str] = None
+    exception_review_date: Optional[str] = None
+    exception_notes: Optional[str] = None
 
     # Gene context
     complex_id: Optional[str] = None  # CI / CII / CIII / CIV / CV
@@ -417,6 +472,9 @@ class VariantRecord:
     lineages_with_disease_allele: list = field(default_factory=list)
     is_cdav_nucleotide: Optional[bool] = None
     is_cdav_amino_acid: Optional[bool] = None
+    classification_subset: Optional[str] = None
+    classification_warning_reason: Optional[str] = None
+    is_clean_classified: Optional[bool] = None
 
     # Tier assignment
     tier: str = "Unassigned"
@@ -446,7 +504,7 @@ class VariantRecord:
 
     def populate_gene_context(self) -> None:
         """Fill complex_id, subunit_role, encoded_by, is_sdh from gene name."""
-        base_gene = self.locus.split("/")[0]
+        base_gene = self.interpreted_gene or self.locus
         self.complex_id = gene_complex(base_gene)
         self.subunit_role = subunit_role(base_gene)
         self.encoded_by = encoded_by(base_gene)

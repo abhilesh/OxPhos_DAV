@@ -71,6 +71,7 @@ class GeneReference:
                     "name": row["Approved name"],
                     "group": row["Group name"],
                     "symbol": sym,
+                    "primary_symbol": sym,
                 }
                 self.lookup[sym] = entry
                 # Also index previous symbols so ClinVar variants annotated
