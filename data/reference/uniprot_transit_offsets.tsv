@@ -1,0 +1,61 @@
+gene	uniprot_accession	uniprot_gene_name	feature_type	transit_end	mature_start	uniprot_offset	toga_seq_len	toga_uniprot_full_identity	mature_start_local_identity	validated	observed_n_rows	observed_median_offset	observed_min_offset	observed_max_offset	offset_audit_agreement	notes
+NDUFV1	P49821		Transit peptide	20	21	20	465	1.0000	1.0000	validated	5	35.0	21.0	65.0	close_delta15	evidence=ECO:0000255
+NDUFV2	P19404		Transit peptide	32	33	32	253	0.9357	1.0000	offset_mismatch_obs13_uni32	3	13.0	11.0	22.0	mismatch_delta19	evidence=ECO:0007744|PubMed
+NDUFV3	P56181		Transit peptide	34	35	34	474	0.9907	1.0000	offset_mismatch_obs50_uni34	11	50.0	-31.0	78.0	mismatch_delta16	evidence=ECO:0000250
+NDUFS1	P28331		Transit peptide	23	24	23	742	1.0000	1.0000	validated	7	23.0	-17.0	43.0	agree_delta0	evidence=ECO:0007744|PubMed
+NDUFS2	O75306		Transit peptide	33	34	33	485	1.0000	1.0000	validated	9	37.0	12.0	64.0	agree_delta4	evidence=ECO:0000250|UniProtKB
+NDUFS3	O75489		Transit peptide	36	37	36	265	1.0000	1.0000	offset_mismatch_obs20_uni36	14	20.0	-51.0	54.0	mismatch_delta16	evidence=ECO:0000269|PubMed
+NDUFS4	O43181		Transit peptide	42	43	42	176	1.0000	1.0000	validated	12	50.0	28.0	63.0	close_delta8	evidence=ECO:0000250
+NDUFS6	O75380		Transit peptide	28	29	28	173	0.8862	1.0000	seq_mismatch_0.89	15	50.0	12.0	66.0	mismatch_delta22	evidence=ECO:0000250
+NDUFS7	O75251		Transit peptide	38	39	38	237	0.9310	0.9796	offset_mismatch_obs68_uni38	11	68.0	11.0	79.0	mismatch_delta30	evidence=ECO:0000250|UniProtKB
+NDUFS8	O00217		Transit peptide	34	35	34	211	1.0000	1.0000	validated	9	36.0	21.0	52.0	agree_delta2	evidence=ECO:0000250|UniProtKB
+NDUFAB1	O14561		Transit peptide	68	69	68	157	1.0000	1.0000	offset_mismatch_obs52_uni68	14	52.0	16.0	76.0	mismatch_delta16	evidence=ECO:0000269|PubMed
+NDUFA2	O43678						100	1.0000		no_transit	3	23.0	20.0	45.0	no_transit_annotated	
+NDUFA6	P56556						155	1.0000		no_transit	3	24.0	11.0	54.0	no_transit_annotated	
+NDUFA9	Q16795		Transit peptide	35	36	35	378	1.0000	1.0000	validated	10	32.5	-11.0	42.0	agree_delta2	evidence=ECO:0000250
+NDUFA10	O95299		Transit peptide	35	36	35	430	0.9565	1.0000	validated	11	30.0	-44.0	47.0	agree_delta5	evidence=ECO:0000250|UniProtKB
+NDUFA13	Q9P0J0						151	0.7778		no_transit	1	34.0	34.0	34.0	no_transit_annotated	
+NDUFB2	O95178		Transit peptide	33	34	33	106	1.0000	1.0000	validated	6	26.5	16.0	48.0	close_delta6	evidence=ECO:0000269|PubMed
+NDUFB3	O43676						99	1.0000		no_transit	1	35.0	35.0	35.0	no_transit_annotated	
+NDUFB5	O43674		Transit peptide	46	47	46	190	1.0000	1.0000	validated	11	49.0	26.0	73.0	agree_delta3	evidence=ECO:0000250
+NDUFB7	P17568						138	1.0000		no_transit	1	-38.0	-38.0	-38.0	no_transit_annotated	
+NDUFB8	O95169		Transit peptide	28	29	28	187	1.0000	1.0000	validated	12	36.0	-45.0	71.0	close_delta8	evidence=ECO:0000250
+NDUFB9	Q9Y6M9						180	1.0000		no_transit	2	32.0	21.0	43.0	no_transit_annotated	
+NDUFB11	Q9NX14		Transit peptide	29	30	29	164	1.0000	1.0000	offset_mismatch_obs54_uni29	6	53.5	19.0	65.0	mismatch_delta24	evidence=ECO:0000250
+NDUFC1	O43677		Transit peptide	27	28	27	77	1.0000	1.0000	validated	6	26.0	18.0	35.0	agree_delta1	evidence=ECO:0000250
+SDHA	P31040		Transit peptide	42	43	42	665	1.0000	1.0000	validated	0				no_audit_data	evidence=ECO:0000250|UniProtKB
+SDHB	P21912		Transit peptide	28	29	28	281	1.0000	1.0000	validated	0				no_audit_data	evidence=ECO:0007744|PubMed
+SDHC	Q99643		Transit peptide	29	30	29	170	1.0000	1.0000	validated	0				no_audit_data	evidence=ECO:0000250|UniProtKB
+SDHD	O14521		Transit peptide	56	57	56	160	1.0000	1.0000	validated	0				no_audit_data	evidence=ECO:0000255
+UQCRC1	P31930		Transit peptide	34	35	34	481	1.0000	1.0000	validated	9	33.0	16.0	47.0	agree_delta1	evidence=ECO:0000269|PubMed
+UQCRC2	P22695		Transit peptide	14	15	14	454	1.0000	1.0000	offset_mismatch_obs34_uni14	8	34.0	21.0	48.0	mismatch_delta20	evidence=manual_no_code
+UQCRFS1	P47985						275	1.0000		no_transit	2	36.5	13.0	60.0	no_transit_annotated	
+UQCRB	P14927						162	0.8198		no_transit	2	50.5	32.0	69.0	no_transit_annotated	
+UQCRH	P07919		Transit peptide	13	14	13	92	1.0000	1.0000	validated	1	13.0	13.0	13.0	agree_delta0	evidence=ECO:0000250|UniProtKB
+CYC1	P08574		Transit peptide	84	85	84	326	1.0000	1.0000	offset_mismatch_obs48_uni84	10	48.5	29.0	79.0	mismatch_delta36	evidence=ECO:0007744|PubMed
+COX4I1	P13073		Transit peptide	22	23	22	170	1.0000	1.0000	validated	7	30.0	14.0	69.0	close_delta8	evidence=ECO:0000269|PubMed
+COX4I2	Q96KJ9		Transit peptide	28	29	28	172	1.0000	1.0000	validated	8	24.5	-17.0	66.0	agree_delta4	evidence=ECO:0000255
+COX5A	P20674		Transit peptide	41	42	41	154	0.8472	1.0000	seq_mismatch_0.85	9	48.0	22.0	79.0	close_delta7	evidence=ECO:0000269|PubMed
+COX5B	P10606		Transit peptide	31	32	31	130	1.0000	1.0000	validated	7	35.0	20.0	48.0	agree_delta4	evidence=ECO:0000269|PubMed
+COX6A1	P12074		Transit peptide	24	25	24	110	1.0000	1.0000	validated	15	27.0	13.0	44.0	agree_delta3	evidence=ECO:0000269|PubMed
+COX6A2	Q02221		Transit peptide	12	13	12	98	1.0000	1.0000	validated	8	13.5	-24.0	36.0	agree_delta2	evidence=ECO:0000250
+COX6B1	P14854						87	1.0000		no_transit	0				no_transit_annotated	
+COX6C	P09669						76	1.0000		no_transit	1	59.0	59.0	59.0	no_transit_annotated	
+COX7A1	P24310		Transit peptide	21	22	21	80	1.0000	1.0000	validated	8	30.5	13.0	64.0	close_delta10	evidence=ECO:0000269|PubMed
+COX7A2	P14406		Transit peptide	23	24	23	116	1.0000	1.0000	offset_mismatch_obs45_uni23	6	45.0	25.0	58.0	mismatch_delta22	evidence=ECO:0000269|PubMed
+COX7B	P24311		Transit peptide	24	25	24	81	1.0000	1.0000	validated	5	22.0	-14.0	37.0	agree_delta2	evidence=ECO:0000269|PubMed
+COX7C	P15954		Transit peptide	16	17	16	64	1.0000	1.0000	offset_mismatch_obs50_uni16	1	50.0	50.0	50.0	mismatch_delta34	evidence=ECO:0000269|PubMed
+COX8A	P10176		Transit peptide	25	26	25	70	1.0000	1.0000	validated	4	30.5	20.0	43.0	close_delta6	evidence=ECO:0000269|PubMed
+NDUFA4	O00483						0			no_transit	0				no_transit_annotated	
+ATP5F1A	P25705		Transit peptide	43	44	43	554	1.0000	1.0000	validated	20	32.0	11.0	68.0	close_delta11	evidence=ECO:0000269|PubMed
+ATP5F1B	P06576		Transit peptide	47	48	47	530	1.0000	1.0000	validated	12	51.0	-64.0	77.0	agree_delta4	evidence=ECO:0000269|PubMed
+ATP5F1C	P36542		Transit peptide	25	26	25	299	1.0000	1.0000	validated	3	40.0	13.0	64.0	close_delta15	evidence=manual_no_code
+ATP5F1D	P30049		Transit peptide	22	23	22	169	1.0000	1.0000	validated	11	36.0	11.0	57.0	close_delta14	evidence=ECO:0000269|PubMed
+ATP5F1E	P56381						52	1.0000		no_transit	1	-15.0	-15.0	-15.0	no_transit_annotated	
+ATP5MC1	P05496		Transit peptide	61	62	61	137	1.0000	1.0000	validated	7	49.0	16.0	80.0	close_delta12	evidence=manual_no_code
+ATP5MC2	Q06055		Transit peptide	66	67	66	158	1.0000	1.0000	offset_mismatch_obs26_uni66	10	25.5	-21.0	74.0	mismatch_delta40	evidence=ECO:0000250
+ATP5MC3	P48201		Transit peptide	67	68	67	143	1.0000	1.0000	offset_mismatch_obs50_uni67	8	50.5	22.0	70.0	mismatch_delta16	evidence=manual_no_code
+ATP5PB	P24539		Transit peptide	42	43	42	257	1.0000	1.0000	offset_mismatch_obs26_uni42	8	26.0	-41.0	73.0	mismatch_delta16	evidence=ECO:0007744|PubMed
+ATP5PD	O75947						162	1.0000		no_transit	0				no_transit_annotated	
+ATP5PF	P18859		Transit peptide	32	33	32	120	0.8981	1.0000	seq_mismatch_0.90	5	26.0	17.0	80.0	close_delta6	evidence=ECO:0000269|PubMed
+ATP5PO	P48047		Transit peptide	23	24	23	214	1.0000	1.0000	validated	5	22.0	15.0	77.0	agree_delta1	evidence=ECO:0000269|PubMed

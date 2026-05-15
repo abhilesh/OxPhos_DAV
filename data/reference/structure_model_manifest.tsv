@@ -1,0 +1,15 @@
+complex_id	pdb_id	role	state_label	organism	method	resolution_angstrom	source_url	active	priority	notes
+CI	9I4I	primary	standalone_complex_I_active	Homo sapiens	cryo-EM	2.63	https://www.rcsb.org/structure/9I4I	True	1	current primary human complex I active-state model
+CI	9TI4	validation	alternative_complex_I_mitochondrial_context	Homo sapiens	cryo-EM	2.66	https://www.rcsb.org/structure/9TI4	True	2	high-resolution alternative human complex I model; retain as CI validation, not respirasome primary
+CI	5XTH	reference	respirasome_context_legacy	Homo sapiens; Bos taurus	cryo-EM	3.90	https://www.rcsb.org/structure/5XTH	False	3	legacy respirasome context; excluded from active mapping panel
+CII	8GS8	primary	standalone_complex_II_ubiquinone_bound	Homo sapiens	cryo-EM	2.86	https://www.rcsb.org/structure/8GS8	True	1	current primary human complex II model with bound ubiquinone
+CIII	9HZL	primary	standalone_complex_III_dimer	Homo sapiens	cryo-EM	2.52	https://www.rcsb.org/structure/9HZL	True	1	current primary human complex III model
+CIII	5XTE	reference	standalone_complex_III_legacy	Homo sapiens	cryo-EM	3.60	https://www.rcsb.org/structure/5XTE	False	2	legacy lower-resolution CIII reference; excluded from active mapping panel
+CIII	5XTH	validation	respirasome_context_legacy	Homo sapiens; Bos taurus	cryo-EM	3.90	https://www.rcsb.org/structure/5XTH	False	3	respirasome context validation excluded from active mapping panel
+CIV	9I7U	primary	NDUFA4_bound_complex_IV_mature_state	Homo sapiens	cryo-EM	3.15	https://www.rcsb.org/structure/9I7U	True	1	mature NDUFA4-bound complex IV within respirasome context
+CIV	9I6F	validation	HIGD2A_bound_complex_IV_assembly_intermediate	Homo sapiens	cryo-EM	2.95	https://www.rcsb.org/structure/9I6F	True	2	HIGD2A-bound late-assembly intermediate
+CIV	5Z62	reference	standalone_complex_IV_legacy	Homo sapiens	cryo-EM	3.60	https://www.rcsb.org/structure/5Z62	False	3	historic lower-resolution CIV reference; excluded from active mapping panel
+CIV	5XTH	validation	respirasome_context_legacy	Homo sapiens; Bos taurus	cryo-EM	3.90	https://www.rcsb.org/structure/5XTH	False	4	respirasome context validation excluded from active mapping panel
+CV	8H9S	primary	ATP_synthase_state_1	Homo sapiens	cryo-EM	2.53	https://www.rcsb.org/structure/8H9S	True	1	current primary human ATP synthase model
+CV	8H9U	validation	ATP_synthase_state_3a	Homo sapiens	cryo-EM	2.61	https://www.rcsb.org/structure/8H9U	True	2	higher-resolution rotational-state validation; promoted to priority 2
+CV	8H9T	validation	ATP_synthase_state_2	Homo sapiens	cryo-EM	2.77	https://www.rcsb.org/structure/8H9T	True	3	lower-resolution rotational-state validation; demoted to priority 3

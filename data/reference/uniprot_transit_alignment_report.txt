@@ -1,0 +1,755 @@
+UniProt Transit Peptide Annotation Report
+======================================================================
+Genes queried: 60
+Validated: 31
+New registry entries added: 27
+
+New registry entries:
+  NDUFV1
+  NDUFS1
+  NDUFS2
+  NDUFS4
+  NDUFS8
+  NDUFA9
+  NDUFA10
+  NDUFB2
+  NDUFB5
+  NDUFB8
+  NDUFC1
+  UQCRC1
+  UQCRH
+  COX4I1
+  COX4I2
+  COX5B
+  COX6A1
+  COX6A2
+  COX7A1
+  COX7B
+  COX8A
+  ATP5F1A
+  ATP5F1B
+  ATP5F1C
+  ATP5F1D
+  ATP5MC1
+  ATP5PO
+
+
+======================================================================
+Gene: NDUFV1  (P49821)
+Feature: Transit peptide
+Transit end: 20  Mature start: 21
+UniProt evidence: ECO:0000255
+TOGA seq len: 465  UniProt seq len: 464
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=5): median=35.0  range=[21.0, 65.0]
+Offset agreement: close_delta15
+Validated: validated
+
+======================================================================
+Gene: NDUFV2  (P19404)
+Feature: Transit peptide
+Transit end: 32  Mature start: 33
+UniProt evidence: ECO:0007744|PubMed
+TOGA seq len: 253  UniProt seq len: 249
+Full-sequence identity (TOGA vs UniProt): 0.9357
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=3): median=13.0  range=[11.0, 22.0]
+Offset agreement: mismatch_delta19
+Validated: offset_mismatch_obs13_uni32
+
+======================================================================
+Gene: NDUFV3  (P56181)
+Feature: Transit peptide
+Transit end: 34  Mature start: 35
+UniProt evidence: ECO:0000250
+TOGA seq len: 474  UniProt seq len: 108
+Full-sequence identity (TOGA vs UniProt): 0.9907
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=11): median=50.0  range=[-31.0, 78.0]
+Offset agreement: mismatch_delta16
+Validated: offset_mismatch_obs50_uni34
+
+======================================================================
+Gene: NDUFS1  (P28331)
+Feature: Transit peptide
+Transit end: 23  Mature start: 24
+UniProt evidence: ECO:0007744|PubMed
+TOGA seq len: 742  UniProt seq len: 727
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=7): median=23.0  range=[-17.0, 43.0]
+Offset agreement: agree_delta0
+Validated: validated
+
+======================================================================
+Gene: NDUFS2  (O75306)
+Feature: Transit peptide
+Transit end: 33  Mature start: 34
+UniProt evidence: ECO:0000250|UniProtKB
+TOGA seq len: 485  UniProt seq len: 463
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=9): median=37.0  range=[12.0, 64.0]
+Offset agreement: agree_delta4
+Validated: validated
+
+======================================================================
+Gene: NDUFS3  (O75489)
+Feature: Transit peptide
+Transit end: 36  Mature start: 37
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 265  UniProt seq len: 264
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=14): median=20.0  range=[-51.0, 54.0]
+Offset agreement: mismatch_delta16
+Validated: offset_mismatch_obs20_uni36
+
+======================================================================
+Gene: NDUFS4  (O43181)
+Feature: Transit peptide
+Transit end: 42  Mature start: 43
+UniProt evidence: ECO:0000250
+TOGA seq len: 176  UniProt seq len: 175
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=12): median=50.0  range=[28.0, 63.0]
+Offset agreement: close_delta8
+Validated: validated
+
+======================================================================
+Gene: NDUFS6  (O75380)
+Feature: Transit peptide
+Transit end: 28  Mature start: 29
+UniProt evidence: ECO:0000250
+TOGA seq len: 173  UniProt seq len: 124
+Full-sequence identity (TOGA vs UniProt): 0.8862
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=15): median=50.0  range=[12.0, 66.0]
+Offset agreement: mismatch_delta22
+Validated: seq_mismatch_0.89
+
+======================================================================
+Gene: NDUFS7  (O75251)
+Feature: Transit peptide
+Transit end: 38  Mature start: 39
+UniProt evidence: ECO:0000250|UniProtKB
+TOGA seq len: 237  UniProt seq len: 213
+Full-sequence identity (TOGA vs UniProt): 0.9310
+Mature-sequence local identity: 0.9796
+Observed failure offsets (n=11): median=68.0  range=[11.0, 79.0]
+Offset agreement: mismatch_delta30
+Validated: offset_mismatch_obs68_uni38
+
+======================================================================
+Gene: NDUFS8  (O00217)
+Feature: Transit peptide
+Transit end: 34  Mature start: 35
+UniProt evidence: ECO:0000250|UniProtKB
+TOGA seq len: 211  UniProt seq len: 210
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=9): median=36.0  range=[21.0, 52.0]
+Offset agreement: agree_delta2
+Validated: validated
+
+======================================================================
+Gene: NDUFAB1  (O14561)
+Feature: Transit peptide
+Transit end: 68  Mature start: 69
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 157  UniProt seq len: 156
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=14): median=52.0  range=[16.0, 76.0]
+Offset agreement: mismatch_delta16
+Validated: offset_mismatch_obs52_uni68
+
+======================================================================
+Gene: NDUFA2  (O43678)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 100  UniProt seq len: 99
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=3): median=23.0  range=[20.0, 45.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: NDUFA6  (P56556)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 155  UniProt seq len: 128
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=3): median=24.0  range=[11.0, 54.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: NDUFA9  (Q16795)
+Feature: Transit peptide
+Transit end: 35  Mature start: 36
+UniProt evidence: ECO:0000250
+TOGA seq len: 378  UniProt seq len: 377
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=10): median=32.5  range=[-11.0, 42.0]
+Offset agreement: agree_delta2
+Validated: validated
+
+======================================================================
+Gene: NDUFA10  (O95299)
+Feature: Transit peptide
+Transit end: 35  Mature start: 36
+UniProt evidence: ECO:0000250|UniProtKB
+TOGA seq len: 430  UniProt seq len: 355
+Full-sequence identity (TOGA vs UniProt): 0.9565
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=11): median=30.0  range=[-44.0, 47.0]
+Offset agreement: agree_delta5
+Validated: validated
+
+======================================================================
+Gene: NDUFA13  (Q9P0J0)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 151  UniProt seq len: 144
+Full-sequence identity (TOGA vs UniProt): 0.7778
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=1): median=34.0  range=[34.0, 34.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: NDUFB2  (O95178)
+Feature: Transit peptide
+Transit end: 33  Mature start: 34
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 106  UniProt seq len: 105
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=6): median=26.5  range=[16.0, 48.0]
+Offset agreement: close_delta6
+Validated: validated
+
+======================================================================
+Gene: NDUFB3  (O43676)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 99  UniProt seq len: 98
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=1): median=35.0  range=[35.0, 35.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: NDUFB5  (O43674)
+Feature: Transit peptide
+Transit end: 46  Mature start: 47
+UniProt evidence: ECO:0000250
+TOGA seq len: 190  UniProt seq len: 189
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=11): median=49.0  range=[26.0, 73.0]
+Offset agreement: agree_delta3
+Validated: validated
+
+======================================================================
+Gene: NDUFB7  (P17568)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 138  UniProt seq len: 137
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=1): median=-38.0  range=[-38.0, -38.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: NDUFB8  (O95169)
+Feature: Transit peptide
+Transit end: 28  Mature start: 29
+UniProt evidence: ECO:0000250
+TOGA seq len: 187  UniProt seq len: 186
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=12): median=36.0  range=[-45.0, 71.0]
+Offset agreement: close_delta8
+Validated: validated
+
+======================================================================
+Gene: NDUFB9  (Q9Y6M9)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 180  UniProt seq len: 179
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=2): median=32.0  range=[21.0, 43.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: NDUFB11  (Q9NX14)
+Feature: Transit peptide
+Transit end: 29  Mature start: 30
+UniProt evidence: ECO:0000250
+TOGA seq len: 164  UniProt seq len: 153
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=6): median=53.5  range=[19.0, 65.0]
+Offset agreement: mismatch_delta24
+Validated: offset_mismatch_obs54_uni29
+
+======================================================================
+Gene: NDUFC1  (O43677)
+Feature: Transit peptide
+Transit end: 27  Mature start: 28
+UniProt evidence: ECO:0000250
+TOGA seq len: 77  UniProt seq len: 76
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=6): median=26.0  range=[18.0, 35.0]
+Offset agreement: agree_delta1
+Validated: validated
+
+======================================================================
+Gene: SDHA  (P31040)
+Feature: Transit peptide
+Transit end: 42  Mature start: 43
+UniProt evidence: ECO:0000250|UniProtKB
+TOGA seq len: 665  UniProt seq len: 664
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=0): median=?  range=[?, ?]
+Offset agreement: no_audit_data
+Validated: validated
+
+======================================================================
+Gene: SDHB  (P21912)
+Feature: Transit peptide
+Transit end: 28  Mature start: 29
+UniProt evidence: ECO:0007744|PubMed
+TOGA seq len: 281  UniProt seq len: 280
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=0): median=?  range=[?, ?]
+Offset agreement: no_audit_data
+Validated: validated
+
+======================================================================
+Gene: SDHC  (Q99643)
+Feature: Transit peptide
+Transit end: 29  Mature start: 30
+UniProt evidence: ECO:0000250|UniProtKB
+TOGA seq len: 170  UniProt seq len: 169
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=0): median=?  range=[?, ?]
+Offset agreement: no_audit_data
+Validated: validated
+
+======================================================================
+Gene: SDHD  (O14521)
+Feature: Transit peptide
+Transit end: 56  Mature start: 57
+UniProt evidence: ECO:0000255
+TOGA seq len: 160  UniProt seq len: 159
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=0): median=?  range=[?, ?]
+Offset agreement: no_audit_data
+Validated: validated
+
+======================================================================
+Gene: UQCRC1  (P31930)
+Feature: Transit peptide
+Transit end: 34  Mature start: 35
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 481  UniProt seq len: 480
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=9): median=33.0  range=[16.0, 47.0]
+Offset agreement: agree_delta1
+Validated: validated
+
+======================================================================
+Gene: UQCRC2  (P22695)
+Feature: Transit peptide
+Transit end: 14  Mature start: 15
+UniProt evidence: manual_no_code
+TOGA seq len: 454  UniProt seq len: 453
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=8): median=34.0  range=[21.0, 48.0]
+Offset agreement: mismatch_delta20
+Validated: offset_mismatch_obs34_uni14
+
+======================================================================
+Gene: UQCRFS1  (P47985)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 275  UniProt seq len: 274
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=2): median=36.5  range=[13.0, 60.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: UQCRB  (P14927)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 162  UniProt seq len: 111
+Full-sequence identity (TOGA vs UniProt): 0.8198
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=2): median=50.5  range=[32.0, 69.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: UQCRH  (P07919)
+Feature: Transit peptide
+Transit end: 13  Mature start: 14
+UniProt evidence: ECO:0000250|UniProtKB
+TOGA seq len: 92  UniProt seq len: 91
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=1): median=13.0  range=[13.0, 13.0]
+Offset agreement: agree_delta0
+Validated: validated
+
+======================================================================
+Gene: CYC1  (P08574)
+Feature: Transit peptide
+Transit end: 84  Mature start: 85
+UniProt evidence: ECO:0007744|PubMed
+TOGA seq len: 326  UniProt seq len: 325
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=10): median=48.5  range=[29.0, 79.0]
+Offset agreement: mismatch_delta36
+Validated: offset_mismatch_obs48_uni84
+
+======================================================================
+Gene: COX4I1  (P13073)
+Feature: Transit peptide
+Transit end: 22  Mature start: 23
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 170  UniProt seq len: 169
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=7): median=30.0  range=[14.0, 69.0]
+Offset agreement: close_delta8
+Validated: validated
+
+======================================================================
+Gene: COX4I2  (Q96KJ9)
+Feature: Transit peptide
+Transit end: 28  Mature start: 29
+UniProt evidence: ECO:0000255
+TOGA seq len: 172  UniProt seq len: 171
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=8): median=24.5  range=[-17.0, 66.0]
+Offset agreement: agree_delta4
+Validated: validated
+
+======================================================================
+Gene: COX5A  (P20674)
+Feature: Transit peptide
+Transit end: 41  Mature start: 42
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 154  UniProt seq len: 150
+Full-sequence identity (TOGA vs UniProt): 0.8472
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=9): median=48.0  range=[22.0, 79.0]
+Offset agreement: close_delta7
+Validated: seq_mismatch_0.85
+
+======================================================================
+Gene: COX5B  (P10606)
+Feature: Transit peptide
+Transit end: 31  Mature start: 32
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 130  UniProt seq len: 129
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=7): median=35.0  range=[20.0, 48.0]
+Offset agreement: agree_delta4
+Validated: validated
+
+======================================================================
+Gene: COX6A1  (P12074)
+Feature: Transit peptide
+Transit end: 24  Mature start: 25
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 110  UniProt seq len: 109
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=15): median=27.0  range=[13.0, 44.0]
+Offset agreement: agree_delta3
+Validated: validated
+
+======================================================================
+Gene: COX6A2  (Q02221)
+Feature: Transit peptide
+Transit end: 12  Mature start: 13
+UniProt evidence: ECO:0000250
+TOGA seq len: 98  UniProt seq len: 97
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=8): median=13.5  range=[-24.0, 36.0]
+Offset agreement: agree_delta2
+Validated: validated
+
+======================================================================
+Gene: COX6B1  (P14854)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 87  UniProt seq len: 86
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=0): median=?  range=[?, ?]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: COX6C  (P09669)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 76  UniProt seq len: 75
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=1): median=59.0  range=[59.0, 59.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: COX7A1  (P24310)
+Feature: Transit peptide
+Transit end: 21  Mature start: 22
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 80  UniProt seq len: 79
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=8): median=30.5  range=[13.0, 64.0]
+Offset agreement: close_delta10
+Validated: validated
+
+======================================================================
+Gene: COX7A2  (P14406)
+Feature: Transit peptide
+Transit end: 23  Mature start: 24
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 116  UniProt seq len: 83
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=6): median=45.0  range=[25.0, 58.0]
+Offset agreement: mismatch_delta22
+Validated: offset_mismatch_obs45_uni23
+
+======================================================================
+Gene: COX7B  (P24311)
+Feature: Transit peptide
+Transit end: 24  Mature start: 25
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 81  UniProt seq len: 80
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=5): median=22.0  range=[-14.0, 37.0]
+Offset agreement: agree_delta2
+Validated: validated
+
+======================================================================
+Gene: COX7C  (P15954)
+Feature: Transit peptide
+Transit end: 16  Mature start: 17
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 64  UniProt seq len: 63
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=1): median=50.0  range=[50.0, 50.0]
+Offset agreement: mismatch_delta34
+Validated: offset_mismatch_obs50_uni16
+
+======================================================================
+Gene: COX8A  (P10176)
+Feature: Transit peptide
+Transit end: 25  Mature start: 26
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 70  UniProt seq len: 69
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=4): median=30.5  range=[20.0, 43.0]
+Offset agreement: close_delta6
+Validated: validated
+
+======================================================================
+Gene: NDUFA4  (O00483)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 0  UniProt seq len: 81
+Full-sequence identity (TOGA vs UniProt): 0.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=0): median=?  range=[?, ?]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: ATP5F1A  (P25705)
+Feature: Transit peptide
+Transit end: 43  Mature start: 44
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 554  UniProt seq len: 553
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=20): median=32.0  range=[11.0, 68.0]
+Offset agreement: close_delta11
+Validated: validated
+
+======================================================================
+Gene: ATP5F1B  (P06576)
+Feature: Transit peptide
+Transit end: 47  Mature start: 48
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 530  UniProt seq len: 529
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=12): median=51.0  range=[-64.0, 77.0]
+Offset agreement: agree_delta4
+Validated: validated
+
+======================================================================
+Gene: ATP5F1C  (P36542)
+Feature: Transit peptide
+Transit end: 25  Mature start: 26
+UniProt evidence: manual_no_code
+TOGA seq len: 299  UniProt seq len: 298
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=3): median=40.0  range=[13.0, 64.0]
+Offset agreement: close_delta15
+Validated: validated
+
+======================================================================
+Gene: ATP5F1D  (P30049)
+Feature: Transit peptide
+Transit end: 22  Mature start: 23
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 169  UniProt seq len: 168
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=11): median=36.0  range=[11.0, 57.0]
+Offset agreement: close_delta14
+Validated: validated
+
+======================================================================
+Gene: ATP5F1E  (P56381)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 52  UniProt seq len: 51
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=1): median=-15.0  range=[-15.0, -15.0]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: ATP5MC1  (P05496)
+Feature: Transit peptide
+Transit end: 61  Mature start: 62
+UniProt evidence: manual_no_code
+TOGA seq len: 137  UniProt seq len: 136
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=7): median=49.0  range=[16.0, 80.0]
+Offset agreement: close_delta12
+Validated: validated
+
+======================================================================
+Gene: ATP5MC2  (Q06055)
+Feature: Transit peptide
+Transit end: 66  Mature start: 67
+UniProt evidence: ECO:0000250
+TOGA seq len: 158  UniProt seq len: 141
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=10): median=25.5  range=[-21.0, 74.0]
+Offset agreement: mismatch_delta40
+Validated: offset_mismatch_obs26_uni66
+
+======================================================================
+Gene: ATP5MC3  (P48201)
+Feature: Transit peptide
+Transit end: 67  Mature start: 68
+UniProt evidence: manual_no_code
+TOGA seq len: 143  UniProt seq len: 142
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=8): median=50.5  range=[22.0, 70.0]
+Offset agreement: mismatch_delta16
+Validated: offset_mismatch_obs50_uni67
+
+======================================================================
+Gene: ATP5PB  (P24539)
+Feature: Transit peptide
+Transit end: 42  Mature start: 43
+UniProt evidence: ECO:0007744|PubMed
+TOGA seq len: 257  UniProt seq len: 256
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=8): median=26.0  range=[-41.0, 73.0]
+Offset agreement: mismatch_delta16
+Validated: offset_mismatch_obs26_uni42
+
+======================================================================
+Gene: ATP5PD  (O75947)
+Feature: 
+Transit end: None  Mature start: 1
+UniProt evidence: 
+TOGA seq len: 162  UniProt seq len: 161
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 0.0000
+Observed failure offsets (n=0): median=?  range=[?, ?]
+Offset agreement: no_transit_annotated
+Validated: no_transit
+
+======================================================================
+Gene: ATP5PF  (P18859)
+Feature: Transit peptide
+Transit end: 32  Mature start: 33
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 120  UniProt seq len: 108
+Full-sequence identity (TOGA vs UniProt): 0.8981
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=5): median=26.0  range=[17.0, 80.0]
+Offset agreement: close_delta6
+Validated: seq_mismatch_0.90
+
+======================================================================
+Gene: ATP5PO  (P48047)
+Feature: Transit peptide
+Transit end: 23  Mature start: 24
+UniProt evidence: ECO:0000269|PubMed
+TOGA seq len: 214  UniProt seq len: 213
+Full-sequence identity (TOGA vs UniProt): 1.0000
+Mature-sequence local identity: 1.0000
+Observed failure offsets (n=5): median=22.0  range=[15.0, 77.0]
+Offset agreement: agree_delta1
+Validated: validated
