@@ -8,4 +8,14 @@ __pycache__/
 *.py[cod]
 
 # macOS system files
-.DS_Store.worktrees/
+.DS_Store
+
+# Local git worktrees (see .worktrees/ usage in git worktree docs)
+.worktrees/
+
+# Local tool/assistant state — machine-specific, not project content
+.claude/settings.local.json
+.superpowers/
+
+# Third-party licensed binaries — download separately, do not vendor in git history
+tools/foldx/
