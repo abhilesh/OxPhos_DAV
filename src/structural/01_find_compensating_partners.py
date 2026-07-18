@@ -352,6 +352,20 @@ def branch_cooccurrence_test(
     }
 
 
+def _species_set(raw) -> set[str]:
+    """
+    Coerce a `lineages_with_disease_allele`-style field to a species set.
+
+    The Parquet-loaded value is normally a native list, but if it were ever
+    a JSON-encoded string instead, `set(raw)` would silently iterate its
+    characters rather than raise — corrupting every downstream Fisher/Pagel/
+    branch-co-occurrence test. Guard against both representations explicitly.
+    """
+    if isinstance(raw, str):
+        raw = json.loads(raw) if raw else []
+    return set(raw or [])
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -430,7 +444,7 @@ def main():
         dar_gene     = var.get("interpreted_gene") or var.get("classification_gene") or var.get("locus", "")
         tier         = var["tier"]
         pair_type    = dar_contacts[0].get("contact_type", "")
-        cdav_spp     = set(var.get("lineages_with_disease_allele", []))
+        cdav_spp     = _species_set(var.get("lineages_with_disease_allele", []))
         dar_aa_coord = int(dar_contacts[0]["dar_aa_coord"])
 
         if dar_gene not in alns:
@@ -741,7 +755,7 @@ def main():
         dar_aa_coord = int(recs[0]["dar_aa_coord"])
         dar_col      = dar_col_map.get(dar_aa_coord)
 
-        cdav_spp    = set(var.get("lineages_with_disease_allele", []))
+        cdav_spp    = _species_set(var.get("lineages_with_disease_allele", []))
         readable_spp = set()
         if dar_col is not None:
             readable_spp = {
