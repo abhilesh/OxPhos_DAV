@@ -1,0 +1,16 @@
+.git
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+archive
+data
+docs
+notes
+results
+work
+.worktrees
+.claude
+.superpowers
+__pycache__
+*.pyc
