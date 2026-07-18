@@ -1,0 +1,212 @@
+---
+title: "OXPHOS DAV Pipeline Overview"
+subtitle: "Goals, data sources, analysis stages, and current results"
+author: "OxPhos DAV project"
+date: "2026-05-15"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    theme: cosmo
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Purpose
+
+This document is a living overview of the OXPHOS disease-associated variant
+pipeline. It records the scientific goals, major data sources, stage contracts,
+and current headline results. Detailed implementation notes remain in
+`notes/` and stage-specific scripts under `src/`.
+
+## Scientific Goals
+
+| Goal | Operational definition | Main output |
+|---|---|---|
+| Build an auditable OXPHOS DAV inventory | Retain disease-associated variant records from MITOMAP and ClinVar with explicit source, eligibility, and exclusion metadata | `variants_master_curated.parquet` |
+| Classify compensated DAVs | AA-level cDAV: a non-human species carries the human disease amino acid. NT-level cDAV: a non-human species carries the exact human disease codon | `variants_master_classified.parquet` |
+| Preserve unresolved and ineligible cases | Use filter-late metadata rather than silent row dropping | classified master, QC files, mismatch logs |
+| Map classified variants to structure | Anchor variants in primary and validation OXPHOS structures with chain, residue, and contact provenance | `dar_structure_map.csv`, `dar_contacts_cbcb8A.csv` |
+| Identify candidate compensating partners | Test whether structural neighbours of cDAV positions show co-evolutionary enrichment | `all_tested_pairs.csv`, `compensatory_partners.csv` |
+| Prepare downstream mechanistic analyses | Support phylogenetic timing, DCA, and mutagenesis/FoldX analyses | `src/phylo/`, `src/mutagenesis/`, HPC scripts |
+
+## Pipeline Diagram
+
+```{mermaid}
+flowchart TD
+  A[Stage 0<br/>Download and reference layer] --> B[Stage 1<br/>Curation]
+  B --> C[Stage 2<br/>cDAV classification]
+  C --> D[Stage 3<br/>Structural mapping]
+  D --> E[Stage 4<br/>Compensating partners]
+  E --> F[Stage 5<br/>Phylogenetic timing / HPC]
+  D --> G[Mutagenesis / FoldX]
+  E --> H[DCA and entropy analyses]
+
+  A1[ClinVar, MITOMAP, HGNC, MANE,<br/>TOGA, PhyloTree, structures] --> A
+  C1[AA-level and NT-level cDAV/uDAV calls] --> C
+  D1[Primary + validation PDB contact maps] --> D
+```
+
+## Data Sources
+
+| Resource | Role | Local path | Current audit note |
+|---|---|---|---|
+| ClinVar variant summary | Primary nucDNA disease-variant source | `data/raw/annotations/ClinVar_VariantSummary_2026-03-26.txt.gz` | Validated |
+| MITOMAP coding variants | Primary mtDNA disease-variant source | `data/raw/annotations/MITOMAP_CodingVariants_2026-03-26.tsv` | Local file validated; remote HTTP 403 documented |
+| HGNC OXPHOS gene list | 100-gene target universe and approved symbols | `data/reference/Canonical_OXPHOS_Subunits_HGNC_2026-03-25.csv` | Frozen Stage 0 input |
+| MANE GRCh38 v1.5 | Transcript reference metadata | `data/raw/reference/MANE_GRCh38_v1.5_2026-04-18.txt.gz` | Validated |
+| TOGA hg38 alignments | nucDNA cross-species AA/codon alignments | `data/alignments/toga_hg38_aa/`, `data/alignments/toga_hg38_codon/` | Used by Stage 2 and downstream phylo |
+| mtDNA alignments | mtDNA cross-species AA/codon alignments | `data/alignments/mtdna_aa/`, `data/alignments/mtdna_codon/` | Used by Stage 2 and downstream phylo |
+| RCSB PDB structures | OXPHOS CI-CV structural panel | `data/structures/` | Manifest-backed primary and validation models |
+| PhyloTree build 17 | mtDNA phylogenetic context | `data/raw/reference/PhyloTree_build_17_2026-03-26.zip` | Validated |
+| VertLife mammal tree | Pagel and timing analyses | `data/phylo/species_tree/` | Used by Stage 4/5 |
+| MitImpact / dbNSFP / gnomAD | Variant severity and population-frequency annotations | `data/raw/annotations/` | MyVariant/dbNSFP/gnomAD completeness legacy-unchecked; not primary inference filter |
+| AAindex | Physicochemical amino acid properties | `data/reference/aaindex_properties_2026-04-07.json` | Frozen Stage 0 reference product |
+
+## Stage Summary
+
+| Stage | Name | Main scripts | Canonical outputs | Current status |
+|---|---|---|---|---|
+| 0 | Download/reference | `src/data_download/00a` through `00i` | raw/reference files, download manifests | Audited and frozen |
+| 1 | Curation | `src/data_curation/01_curate_variants.py`; transcript/genomic map builders; sanitation scripts | `variants_master_curated.parquet` | Audited and frozen |
+| 2 | Classification | `src/align/*`, `src/classify/00_classify_DAV.py`, `01_audit_exception_candidates.py` | `variants_master_classified.parquet`, classified subsets, QC files | Audited and frozen |
+| 3 | Structural mapping | `src/structural/00_map_davs_to_structure.py` | `dar_structure_map.csv`, contact CSVs, structural summaries | Rerun after COXFA4/NDUFA4 boundary fix; ready for re-audit |
+| 4 | Compensating partners | `src/structural/01_find_compensating_partners.py` | `all_tested_pairs.csv`, `compensatory_partners.csv`, `concordance_summary.csv` | Rerun after Stage 3 fix; not yet frozen |
+| 5 | Phylogenetic timing | `src/phylo/`, `scripts/slurm_*` | IQTree/Pagel manifests and HPC outputs | Active / HPC-bound |
+| 6 | Mutagenesis | `src/mutagenesis/`, `tools/foldx/` | FoldX and double-mutant stability outputs | Not started |
+
+## Current Headline Results
+
+### Variant Inventory and Classification
+
+| Metric | Count |
+|---|---:|
+| HGNC OXPHOS target genes | 100 |
+| mtDNA genes | 13 |
+| nucDNA genes | 87 |
+| Curated interpretation rows | 33,779 |
+| mtDNA curated rows | 388 |
+| nucDNA curated rows | 33,391 |
+| Classified rows | 6,809 |
+| Classified clean rows | 6,340 |
+| Classified warning rows | 469 |
+| Unresolved rows | 68 |
+| Classification QC checks | 6 checks, 0 failures |
+
+| Genome | Classified | AA-cDAV | NT-cDAV | AA-cDAV % | NT-cDAV % |
+|---|---:|---:|---:|---:|---:|
+| mtDNA | 323 | 167 | 149 | 51.70 | 46.13 |
+| nucDNA | 6,486 | 2,046 | 1,745 | 31.54 | 26.90 |
+
+### Cross-source mtDNA Linkage
+
+| Metric | Count |
+|---|---:|
+| Shared unique ClinVar/MITOMAP mtDNA nucleotide events | 234 |
+| ClinVar mtDNA rows present in MITOMAP | 468 |
+| ClinVar mtDNA rows absent from MITOMAP | 4,114 |
+| Unique ClinVar mtDNA variant IDs absent from MITOMAP | 2,057 |
+
+### Structural Mapping
+
+| Metric | Count |
+|---|---:|
+| Classified rows loaded | 33,779 |
+| Unique source-variant summaries | 17,167 |
+| Mapping-eligible variants | 6,673 |
+| Unique variants with at least one structural map | 6,326 |
+| Eligible but failed | 347 |
+| True mapping rate | 94.8% |
+| Structure map rows | 37,549 |
+| Canonical contact rows | 64,968 |
+| Validation contact rows | 29,231 |
+| Union contact rows | 94,199 |
+| Canonical mito-nuclear contact rows | 1,208 |
+
+| Mapping support class | Variant summaries |
+|---|---:|
+| Primary and validation | 2,872 |
+| Primary only | 3,454 |
+| Validation only | 0 |
+| Unmapped | 10,841 |
+
+| Structural status category | Model rows |
+|---|---:|
+| structural_ineligible | 27,106 |
+| mapped_direct | 8,321 |
+| mapped_with_extended_offset_rescue | 1,130 |
+| mapped_with_isoform_offset | 320 |
+| secondary_not_attempted | 306 |
+| mature_offset_candidate | 198 |
+| residue_anchoring_failure | 151 |
+| chain_assignment_or_model_gap | 17 |
+
+### Gene-symbol Boundary
+
+The frozen HGNC source uses `COXFA4` as the approved analytical symbol and
+`NDUFA4` as a previous/resource symbol. Structural resources still commonly use
+`NDUFA4`. Current Stage 3 outputs therefore separate:
+
+| Field | Meaning | Example |
+|---|---|---|
+| `interpreted_gene`, `dar_locus`, `contact_gene` | HGNC/classification analytical key | `COXFA4` |
+| `structure_gene`, `dar_structure_gene`, `contact_structure_gene` | PDB/UniProt structural-resource key | `NDUFA4` |
+
+Current validation after rerun:
+
+| Check | Result |
+|---|---:|
+| NDUFA4 values in analytical structural fields | 0 |
+| COXFA4 DAR contact rows with NDUFA4 structural provenance | 140 |
+| COXFA4 contact-neighbour rows with NDUFA4 structural provenance | 131 |
+| COXFA4 DAR rows in `all_tested_pairs.csv` | 19 |
+| Duplicate primary partner tuples after alias fix | 0 |
+
+### Compensating Partners
+
+| Output | Rows | Interpretation |
+|---|---:|---|
+| `all_tested_pairs.csv` | 9,068 | All tested cDAV-contact pairs |
+| `compensatory_partners.csv` | 199 | Significant derived view |
+| `concordance_summary.csv` | 1,447 | Per-cDAV contact-enrichment summary |
+
+Stage 4 currently includes Fisher's exact test, Pagel's discrete test where
+available, and branch co-occurrence from ancestral state maps. Fisher is retained
+for comparison and should not be treated as the sole primary phylogenetic
+evidence.
+
+## Structural Source Panel
+
+| Complex | Primary model | Validation models | Notes |
+|---|---|---|---|
+| CI | 9I4I | 9TI4 | Active human complex I model plus alternative mitochondrial context |
+| CII | 8GS8 | none | Ubiquinone-bound human complex II |
+| CIII | 9HZL | none | Human complex III dimer |
+| CIV | 9I7U | 9I6F | NDUFA4-bound mature state retained as primary despite lower resolution than assembly intermediate |
+| CV | 8H9S | 8H9U, 8H9T | ATP synthase rotational-state validation; 8H9U priority above 8H9T |
+
+## Known Caveats
+
+| Caveat | Current handling |
+|---|---|
+| MyVariant/dbNSFP/gnomAD completeness | Marked legacy-unchecked; not used as a primary inference filter |
+| MITOMAP programmatic access | Local file validated; remote HTTP 403 documented |
+| mtDNA ClinVar rows | Retained for traceability, linked to MITOMAP where possible, ineligible for nuclear comparative branch |
+| Residual unresolved nucDNA rows | Retained as unresolved, never forced into uDAV |
+| Structural mappability | Structural conclusions conditioned on mapping eligibility/support class |
+| Duplicate protomers | Gene-level mapping is usable; protomer-specific claims require caution |
+| Local Pagel runtime | Full phylogenetic testing is HPC-bound; local runs may be incomplete or partial |
+
+## Next Steps
+
+| Area | Next action |
+|---|---|
+| Stage 3 freeze | Re-audit post-COXFA4/NDUFA4 outputs and add Stage 3 artifacts to the freeze registry if clean |
+| Stage 4 validation | Confirm partner calls after full HPC phylogenetic outputs are available |
+| Stage 5 | Regenerate/submit IQTree and Pagel HPC jobs from current `all_tested_pairs.csv` |
+| Mutagenesis | Start FoldX/FoldX-like stability analysis for prioritized cDAV-partner pairs |
+| Manuscript figures | Convert headline tables into publication figures once frozen stages are locked |
+
