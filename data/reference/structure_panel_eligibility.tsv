@@ -1,0 +1,101 @@
+gene	complex_id	eligibility_status	n_variants_total	n_mapped_direct	n_mapped_proxy	notes
+SDHA	CII	structurally_testable_direct	3283	1559	0	1559 variant(s) mapped without proxy substitution.
+SDHB	CII	structurally_testable_direct	1675	743	0	743 variant(s) mapped without proxy substitution.
+SDHC	CII	structurally_testable_direct	1012	379	0	379 variant(s) mapped without proxy substitution.
+SDHD	CII	structurally_testable_direct	932	389	0	389 variant(s) mapped without proxy substitution.
+UQCRC1	CIII	structurally_testable_direct	111	94	0	94 variant(s) mapped without proxy substitution.
+UQCR10	CIII	structurally_testable_direct	9	7	0	7 variant(s) mapped without proxy substitution.
+UQCR11	CIII	structurally_testable_direct	15	11	0	11 variant(s) mapped without proxy substitution.
+UQCRC2	CIII	structurally_testable_direct	203	81	0	81 variant(s) mapped without proxy substitution.
+MT-CYB	CIII	no_eligible_variants	333	0	0	All 333 rows for this gene are ineligible ClinVar-duplicate/non-missense inventory rows retained under the filter-late design (0 in dav_metrics_by_gene.tsv) - structural coverage is not applicable here, not a panel gap.
+CYC1	CIII	structurally_testable_direct	184	78	0	78 variant(s) mapped without proxy substitution.
+UQCRFS1	CIII	structurally_testable_direct	43	31	0	31 variant(s) mapped without proxy substitution.
+UQCRH	CIII	structurally_testable_direct	24	14	0	14 variant(s) mapped without proxy substitution.
+UQCRB	CIII	structurally_testable_direct	96	25	0	25 variant(s) mapped without proxy substitution.
+UQCRQ	CIII	structurally_testable_direct	103	25	0	25 variant(s) mapped without proxy substitution.
+COX4I1	CIV	structurally_testable_direct	49	35	0	35 variant(s) mapped without proxy substitution.
+COX4I2	CIV	structurally_testable_proxy	86	0	47	47 variant(s) mapped only via isoform proxy -> COX4I1.
+COX5A	CIV	structurally_testable_direct	44	13	0	13 variant(s) mapped without proxy substitution.
+COX5B	CIV	structurally_testable_direct	24	20	0	20 variant(s) mapped without proxy substitution.
+COX6A1	CIV	structurally_testable_direct	121	53	0	53 variant(s) mapped without proxy substitution.
+COX6A2	CIV	structurally_testable_proxy	29	0	26	26 variant(s) mapped only via isoform proxy -> COX6A1.
+COX6B1	CIV	structurally_testable_direct	71	25	0	25 variant(s) mapped without proxy substitution.
+COX6B2	Unassigned	structurally_unrepresented	14	0	0	Classified/eligible variants exist but none ever mapped successfully in any active model.
+COX6C	CIV	structurally_testable_direct	23	15	0	15 variant(s) mapped without proxy substitution.
+COX7A1	CIV	structurally_testable_proxy	24	0	2	2 variant(s) mapped only via isoform proxy -> COX7A2.
+COX7A2	CIV	structurally_testable_direct	35	4	0	4 variant(s) mapped without proxy substitution.
+COX7B	CIV	structurally_testable_direct	49	19	0	19 variant(s) mapped without proxy substitution.
+COX7B2	Unassigned	structurally_unrepresented	12	0	0	Classified/eligible variants exist but none ever mapped successfully in any active model.
+COX7C	CIV	structurally_testable_direct	15	5	0	5 variant(s) mapped without proxy substitution.
+COX8A	CIV	structurally_testable_direct	36	15	0	15 variant(s) mapped without proxy substitution.
+COX8C	Unassigned	structurally_unrepresented	17	0	0	Classified/eligible variants exist but none ever mapped successfully in any active model.
+COXFA4	CIV	structurally_testable_direct	77	17	0	17 variant(s) mapped without proxy substitution.
+COXFA4L2	Unassigned	structurally_unrepresented	20	0	0	Classified/eligible variants exist but none ever mapped successfully in any active model.
+COXFA4L3	Unassigned	structurally_unrepresented	6	0	0	Classified/eligible variants exist but none ever mapped successfully in any active model.
+MT-CO1	CIV	no_eligible_variants	238	0	0	All 238 rows for this gene are ineligible ClinVar-duplicate/non-missense inventory rows retained under the filter-late design (0 in dav_metrics_by_gene.tsv) - structural coverage is not applicable here, not a panel gap.
+MT-CO2	CIV	no_eligible_variants	130	0	0	All 130 rows for this gene are ineligible ClinVar-duplicate/non-missense inventory rows retained under the filter-late design (0 in dav_metrics_by_gene.tsv) - structural coverage is not applicable here, not a panel gap.
+MT-CO3	CIV	no_eligible_variants	170	0	0	All 170 rows for this gene are ineligible ClinVar-duplicate/non-missense inventory rows retained under the filter-late design (0 in dav_metrics_by_gene.tsv) - structural coverage is not applicable here, not a panel gap.
+ATP5F1A	CV	structurally_testable_direct	314	140	0	140 variant(s) mapped without proxy substitution.
+ATP5F1B	CV	structurally_testable_direct	60	49	0	49 variant(s) mapped without proxy substitution.
+ATP5F1C	CV	structurally_testable_direct	51	39	0	39 variant(s) mapped without proxy substitution.
+ATP5F1D	CV	structurally_testable_direct	172	85	0	85 variant(s) mapped without proxy substitution.
+ATP5F1E	CV	structurally_testable_direct	39	11	0	11 variant(s) mapped without proxy substitution.
+ATP5MC1	CV	structurally_testable_direct	28	19	0	19 variant(s) mapped without proxy substitution.
+ATP5MC2	CV	structurally_testable_proxy	34	0	17	17 variant(s) mapped only via isoform proxy -> ATP5MC1.
+ATP5MC3	CV	structurally_testable_proxy	36	0	22	22 variant(s) mapped only via isoform proxy -> ATP5MC1.
+ATP5ME	CV	structurally_testable_direct	28	12	0	12 variant(s) mapped without proxy substitution.
+ATP5MF	CV	structurally_testable_direct	11	9	0	9 variant(s) mapped without proxy substitution.
+ATP5MG	CV	structurally_testable_direct	18	12	0	12 variant(s) mapped without proxy substitution.
+ATP5MJ	CV	structurally_testable_direct	20	3	0	3 variant(s) mapped without proxy substitution.
+ATP5MK	Unassigned	structurally_unrepresented	19	0	0	Classified/eligible variants exist but none ever mapped successfully in any active model.
+MT-ATP6	CV	structurally_testable_direct	392	81	0	81 variant(s) mapped without proxy substitution.
+MT-ATP8	CV	structurally_testable_direct	95	12	0	12 variant(s) mapped without proxy substitution.
+ATP5PB	CV	structurally_unrepresented	69	0	0	Classified/eligible variants exist but none ever mapped successfully in any active model.
+ATP5PD	CV	structurally_unrepresented	29	0	0	Classified/eligible variants exist but none ever mapped successfully in any active model.
+ATP5PF	CV	structurally_unrepresented	24	0	0	Classified/eligible variants exist but none ever mapped successfully in any active model.
+ATP5PO	CV	structurally_testable_direct	54	7	0	7 variant(s) mapped without proxy substitution.
+ATP5IF1	CV	structurally_testable_direct	17	5	0	5 variant(s) mapped without proxy substitution.
+MT-ND1	CI	structurally_testable_direct	270	74	0	74 variant(s) mapped without proxy substitution.
+MT-ND2	CI	structurally_testable_direct	217	21	0	21 variant(s) mapped without proxy substitution.
+MT-ND3	CI	structurally_testable_direct	66	12	0	12 variant(s) mapped without proxy substitution.
+MT-ND4	CI	structurally_testable_direct	181	23	0	23 variant(s) mapped without proxy substitution.
+MT-ND4L	CI	structurally_testable_direct	40	6	0	6 variant(s) mapped without proxy substitution.
+MT-ND5	CI	structurally_testable_direct	397	58	0	58 variant(s) mapped without proxy substitution.
+MT-ND6	CI	structurally_testable_direct	150	30	0	30 variant(s) mapped without proxy substitution.
+NDUFS1	CI	structurally_testable_direct	512	207	0	207 variant(s) mapped without proxy substitution.
+NDUFS2	CI	structurally_testable_direct	281	114	0	114 variant(s) mapped without proxy substitution.
+NDUFS3	CI	structurally_testable_direct	172	63	0	63 variant(s) mapped without proxy substitution.
+NDUFS7	CI	structurally_testable_direct	370	46	0	46 variant(s) mapped without proxy substitution.
+NDUFS8	CI	structurally_testable_direct	166	84	0	84 variant(s) mapped without proxy substitution.
+NDUFV1	CI	structurally_testable_direct	559	199	0	199 variant(s) mapped without proxy substitution.
+NDUFV2	CI	structurally_testable_direct	174	55	0	55 variant(s) mapped without proxy substitution.
+NDUFA1	CI	structurally_testable_direct	80	27	0	27 variant(s) mapped without proxy substitution.
+NDUFA10	CI	structurally_testable_direct	393	102	0	102 variant(s) mapped without proxy substitution.
+NDUFA11	CI	structurally_testable_direct	143	34	0	34 variant(s) mapped without proxy substitution.
+NDUFA12	CI	structurally_testable_direct	112	42	0	42 variant(s) mapped without proxy substitution.
+NDUFA13	CI	structurally_testable_direct	103	43	0	43 variant(s) mapped without proxy substitution.
+NDUFA2	CI	structurally_testable_direct	102	30	0	30 variant(s) mapped without proxy substitution.
+NDUFA3	CI	structurally_testable_direct	20	14	0	14 variant(s) mapped without proxy substitution.
+NDUFA5	CI	structurally_testable_direct	16	12	0	12 variant(s) mapped without proxy substitution.
+NDUFA6	CI	structurally_testable_direct	86	34	0	34 variant(s) mapped without proxy substitution.
+NDUFA7	CI	structurally_testable_direct	25	22	0	22 variant(s) mapped without proxy substitution.
+NDUFA8	CI	structurally_testable_direct	42	33	0	33 variant(s) mapped without proxy substitution.
+NDUFA9	CI	structurally_testable_direct	286	146	0	146 variant(s) mapped without proxy substitution.
+NDUFAB1	CI	structurally_testable_direct	41	10	0	10 variant(s) mapped without proxy substitution.
+NDUFB1	CI	structurally_testable_direct	17	7	0	7 variant(s) mapped without proxy substitution.
+NDUFB10	CI	structurally_testable_direct	122	75	0	75 variant(s) mapped without proxy substitution.
+NDUFB11	CI	structurally_testable_direct	99	36	0	36 variant(s) mapped without proxy substitution.
+NDUFB2	CI	structurally_testable_direct	27	19	0	19 variant(s) mapped without proxy substitution.
+NDUFB3	CI	structurally_testable_direct	51	25	0	25 variant(s) mapped without proxy substitution.
+NDUFB4	CI	structurally_testable_direct	18	12	0	12 variant(s) mapped without proxy substitution.
+NDUFB5	CI	structurally_testable_direct	51	38	0	38 variant(s) mapped without proxy substitution.
+NDUFB6	CI	structurally_testable_direct	19	16	0	16 variant(s) mapped without proxy substitution.
+NDUFB7	CI	structurally_testable_direct	31	24	0	24 variant(s) mapped without proxy substitution.
+NDUFB8	CI	structurally_testable_direct	106	56	0	56 variant(s) mapped without proxy substitution.
+NDUFB9	CI	structurally_testable_direct	129	57	0	57 variant(s) mapped without proxy substitution.
+NDUFC1	CI	structurally_testable_direct	23	15	0	15 variant(s) mapped without proxy substitution.
+NDUFC2	CI	structurally_testable_direct	7	3	0	3 variant(s) mapped without proxy substitution.
+NDUFS4	CI	structurally_testable_direct	256	52	0	52 variant(s) mapped without proxy substitution.
+NDUFS5	CI	structurally_testable_direct	21	15	0	15 variant(s) mapped without proxy substitution.
+NDUFS6	CI	structurally_testable_direct	255	24	0	24 variant(s) mapped without proxy substitution.
+NDUFV3	CI	structurally_testable_direct	108	5	0	5 variant(s) mapped without proxy substitution.

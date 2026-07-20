@@ -611,22 +611,36 @@ def main():
         if not raw_tests:
             continue
 
-        # Fisher FDR per-DAR
-        fisher_ps = [t["fisher_p"] for t in raw_tests]
-        fisher_fdrs = bh_fdr(fisher_ps)
-        for t, fdr in zip(raw_tests, fisher_fdrs):
-            t["fisher_fdr"] = fdr
-
-        # Branch FDR per-DAR
-        branch_ps = [t["branch_cooccur_p"] for t in raw_tests]
-        valid_bp  = [(i, p) for i, p in enumerate(branch_ps) if p is not None]
-        if valid_bp:
-            idxs, ps = zip(*valid_bp)
-            fdrs = bh_fdr(list(ps))
-            for idx, fdr in zip(idxs, fdrs):
-                raw_tests[idx]["branch_cooccur_fdr"] = fdr
-
+        # fisher_fdr / branch_cooccur_fdr are left unset here and corrected
+        # globally below, once every DAR has been processed — see the
+        # "Global FDR correction" block. Per-DAR correction would give each
+        # DAR its own independent FDR scope while _get_sig() checks the
+        # result against a single fixed threshold, which is not a valid
+        # global false-discovery-rate guarantee.
         all_records.extend(raw_tests)
+
+    # ── Global FDR correction (Fisher + branch co-occurrence) ──────────────────
+    # Corrected once across every tested pair, matching the Pagel FDR pass
+    # below (Pass 2) rather than per-DAR. Per-DAR correction previously let
+    # _get_sig()'s fixed 0.10 threshold silently mean different things
+    # depending on how many contacts a given DAR happened to have.
+    valid_fisher = [(i, r["fisher_p"]) for i, r in enumerate(all_records)
+                    if r["fisher_p"] is not None]
+    if valid_fisher:
+        idxs, ps = zip(*valid_fisher)
+        fdrs = bh_fdr(list(ps))
+        for idx, fdr in zip(idxs, fdrs):
+            all_records[idx]["fisher_fdr"] = fdr
+        print(f"Fisher FDR computed globally for {len(valid_fisher)} pairs.")
+
+    valid_branch = [(i, r["branch_cooccur_p"]) for i, r in enumerate(all_records)
+                    if r["branch_cooccur_p"] is not None]
+    if valid_branch:
+        idxs, ps = zip(*valid_branch)
+        fdrs = bh_fdr(list(ps))
+        for idx, fdr in zip(idxs, fdrs):
+            all_records[idx]["branch_cooccur_fdr"] = fdr
+        print(f"Branch co-occurrence FDR computed globally for {len(valid_branch)} pairs.")
 
     # ── Pass 2: Pagel batch (one R process for all pairs) ─────────────────────
     if vert_available and pagel_pending:

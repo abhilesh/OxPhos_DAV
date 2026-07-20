@@ -62,6 +62,7 @@ if not STRUCTURE_MANIFEST.exists():
 TRANSCRIPT_MAPS_JSON = ROOT / "data" / "derived" / "curated" / "transcript_position_maps.json"
 ANCHOR_EXCEPTION_REGISTRY = ROOT / "data" / "reference" / "structural_anchor_exception_registry.tsv"
 CHAIN_GENE_OVERRIDE_REGISTRY = ROOT / "data" / "reference" / "structure_chain_gene_overrides.tsv"
+STRUCTURE_PANEL_ELIGIBILITY_REGISTRY = ROOT / "data" / "reference" / "structure_panel_eligibility.tsv"
 TOGA_AA_DIR = ROOT / "data" / "alignments" / "toga_hg38_aa"
 MT_AA_DIR   = ROOT / "data" / "alignments" / "mtdna_aa"
 OUT_DIR = ROOT / "results" / "structural"
@@ -78,6 +79,19 @@ _ISOFORM_PROXY = {
     "ATP5MC2": "ATP5MC1",  # c-subunit isoform 2; 8H9S has ATP5MC1
     "ATP5MC3": "ATP5MC1",  # c-subunit isoform 3; 8H9S has ATP5MC1
 }
+
+# ── Chain-assignment fallback threshold ────────────────────────────────────────
+# When neither the RCSB API nor a manual chain-gene override resolves a chain,
+# assign_chain_to_gene() falls back to local pairwise-alignment scoring. A
+# chain is accepted only if its best-scoring gene clears this fraction of a
+# perfect self-alignment score for the shorter sequence. 0.30 is a
+# conservative, commonly-cited "safe zone" for confident local-alignment
+# homology detection, but it has NOT been empirically calibrated against this
+# project's own chain-assignment outcomes (flagged in the 2026-05-12
+# structural audit, bug P8) — there is no labeled correct/incorrect dataset
+# to calibrate against yet. Every fallback assignment is logged with its
+# score ratio so a future calibration pass has real data to work from.
+_CHAIN_ASSIGNMENT_IDENTITY_THRESHOLD = 0.30
 
 # ── TOGA filename → canonical HGNC symbol ─────────────────────────────────────
 # TOGA alignment files are stored under the old gene name; map them to the
@@ -387,6 +401,27 @@ def load_chain_gene_overrides() -> dict[tuple[str, str], str]:
             if pdb_id and chain_id and structure_gene:
                 overrides[(pdb_id, chain_id)] = structure_gene
     return overrides
+
+
+def load_structure_panel_eligibility() -> dict[str, str]:
+    """
+    Load the structure-panel eligibility registry: per-gene ground truth on
+    whether structural absence reflects a real panel gap (`structurally_unrepresented`),
+    no classified/eligible variants ever reaching this stage (`no_eligible_variants`),
+    or normal direct/proxy coverage. Built from the historical mapping run in
+    data/reference/structure_panel_eligibility.tsv (see tools/ for regeneration).
+    Missing file degrades gracefully to "no prior evidence" for every gene.
+    """
+    if not STRUCTURE_PANEL_ELIGIBILITY_REGISTRY.exists():
+        return {}
+    eligibility: dict[str, str] = {}
+    with open(STRUCTURE_PANEL_ELIGIBILITY_REGISTRY, newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            gene = (row.get("gene") or "").strip()
+            status = (row.get("eligibility_status") or "").strip()
+            if gene and status:
+                eligibility[gene] = status
+    return eligibility
 
 
 def resolve_structure_ref_gene(accession: str, db_code: str, description: str, known_genes: set) -> str | None:
@@ -754,7 +789,7 @@ def build_transcript_reconciliation(
     }
 
 
-def status_category(status: str, proxy_gene: str = "") -> str:
+def status_category(status: str, proxy_gene: str = "", gene_eligibility: str = "") -> str:
     if status == "structural_ineligible":
         return "structural_ineligible"
     if status == "secondary_not_attempted_no_primary_support":
@@ -764,7 +799,15 @@ def status_category(status: str, proxy_gene: str = "") -> str:
     if status == "position_not_in_enst":
         return "sequence_model_mismatch"
     if status == "no_chain_in_pdb":
-        return "isoform_proxy_gap" if proxy_gene else "chain_assignment_or_model_gap"
+        if proxy_gene:
+            return "isoform_proxy_gap"
+        # Split the previously-conflated "chain_assignment_or_model_gap" bucket
+        # (bug P9, 2026-05-12 audit) using the structure-panel eligibility
+        # registry: a gene with no historical successful mapping anywhere is a
+        # known panel gap, not an unexpected per-variant failure.
+        if gene_eligibility == "structurally_unrepresented":
+            return "gene_unrepresented_in_panel"
+        return "chain_assignment_or_model_gap"
     if status in {
         "unresolved_structure_segment_candidate",
         "possible_large_offset_or_gap",
@@ -841,6 +884,7 @@ def main():
     transcript_maps = load_transcript_maps()
     anchor_registry = load_anchor_exception_registry()
     chain_gene_overrides = load_chain_gene_overrides()
+    panel_eligibility = load_structure_panel_eligibility()
     manifest_by_complex: dict[str, list[dict]] = {}
     for row in structure_manifest:
         manifest_by_complex.setdefault(row["complex_id"], []).append(row)
@@ -1057,17 +1101,24 @@ def main():
                 for chain_id, chain_seq in chain_seqs.items():
                     if chain_id in chain_to_gene:
                         continue
-                    best_gene, best_score = None, 0.0
+                    best_gene, best_score, best_ratio = None, 0.0, 0.0
                     for r_gene, r_seq in ref_seqs.items():
                         if GENE_COMPLEX.get(r_gene) != complex_id:
                             continue
                         score = assign_chain_to_gene(r_seq, chain_seq)
-                        threshold = min(len(r_seq), len(chain_seq)) * 2 * 0.30
+                        max_possible = min(len(r_seq), len(chain_seq)) * 2
+                        threshold = max_possible * _CHAIN_ASSIGNMENT_IDENTITY_THRESHOLD
                         if score > best_score and score > threshold:
-                            best_score, best_gene = score, r_gene
+                            best_score = score
+                            best_gene = r_gene
+                            best_ratio = score / max_possible if max_possible else 0.0
                     if best_gene:
                         chain_to_gene[chain_id] = best_gene
                         gene_to_chains.setdefault(best_gene, []).append(chain_id)
+                        print(f"    Fallback local-alignment chain assignment: "
+                              f"{pdb_id} chain {chain_id} -> {best_gene} "
+                              f"(score_ratio={best_ratio:.2f}, "
+                              f"threshold={_CHAIN_ASSIGNMENT_IDENTITY_THRESHOLD:.2f})")
 
                 pos_maps = {}
                 for mapped_gene, chain_ids in gene_to_chains.items():
@@ -1102,7 +1153,10 @@ def main():
                         "struct_resnum": "",
                         "status": "no_chain_in_pdb",
                         "proxy_gene": proxy_gene or "",
-                        "status_category": status_category("no_chain_in_pdb", proxy_gene or ""),
+                        "status_category": status_category(
+                            "no_chain_in_pdb", proxy_gene or "",
+                            panel_eligibility.get(row.get("interpreted_gene", ""), ""),
+                        ),
                         "anchor_method": None,
                         "anchor_failure_detail": None,
                     })
