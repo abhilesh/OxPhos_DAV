@@ -360,10 +360,22 @@ def _species_set(raw) -> set[str]:
     a JSON-encoded string instead, `set(raw)` would silently iterate its
     characters rather than raise — corrupting every downstream Fisher/Pagel/
     branch-co-occurrence test. Guard against both representations explicitly.
+
+    Some pandas/pyarrow versions (confirmed on the lambda HPC conda env,
+    2026-07-21) return list-like columns as numpy arrays rather than native
+    lists from `.to_dict(orient="records")` — `raw or []` then raises
+    ValueError ("truth value of an array... is ambiguous") instead of the
+    silent-corruption failure mode this function was originally guarding
+    against. Convert array-likes to a list first and use an explicit
+    `is None` check instead of `or`, which never touches array truthiness.
     """
     if isinstance(raw, str):
         raw = json.loads(raw) if raw else []
-    return set(raw or [])
+    elif isinstance(raw, np.ndarray):
+        raw = raw.tolist()
+    if raw is None:
+        raw = []
+    return set(raw)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
