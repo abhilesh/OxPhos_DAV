@@ -203,13 +203,15 @@ def main():
     pagel_pending:  list[tuple] = []   # (rec_idx, dar_spp, test_spp, contact_alt_spp, key_str)
 
     for ann_id, dar_contacts in by_dar.items():
-        var          = cdavs[ann_id]
-        dar_gene     = (
-            var.get("interpreted_gene")
-            or var.get("classification_gene")
-            or str(var.get("locus", "")).split("/")[0]
-        )
-        cdav_spp     = set(var.get("lineages_with_disease_allele", []))
+        var      = cdavs[ann_id]
+        dar_gene = var.get("interpreted_gene") or var.get("classification_gene")
+        if not dar_gene:
+            # Do not fall back to locus.split("/")[0] for overlap loci
+            # (e.g. MT-ATP6/MT-ATP8) — that can silently misassign gene
+            # identity. Skip rather than guess.
+            print(f"  WARNING: {ann_id} has no interpreted_gene/classification_gene; skipping")
+            continue
+        cdav_spp     = p._species_set(var.get("lineages_with_disease_allele", []))
         dar_aa_coord = int(dar_contacts[0]["dar_aa_coord"])
 
         if dar_gene not in alns:

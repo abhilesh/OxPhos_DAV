@@ -71,14 +71,18 @@ def genes_with_cdavs() -> dict[str, str]:
         (df["is_cdav_amino_acid"] == True)
     ].to_dict(orient="records")
     genes: dict[str, str] = {}
+    skipped = 0
     for var in cdavs:
-        gene = (
-            var.get("interpreted_gene")
-            or var.get("classification_gene")
-            or str(var.get("locus", "")).split("/")[0]
-        )
-        if gene:
-            genes[gene] = var.get("genome", "nucDNA")
+        # Do not fall back to locus.split("/")[0] for overlap loci
+        # (e.g. MT-ATP6/MT-ATP8) — that can silently misassign gene
+        # identity. Skip rather than guess.
+        gene = var.get("interpreted_gene") or var.get("classification_gene")
+        if not gene:
+            skipped += 1
+            continue
+        genes[gene] = var.get("genome", "nucDNA")
+    if skipped:
+        print(f"  WARNING: skipped {skipped} cDAV(s) with no interpreted_gene/classification_gene")
     return genes
 
 

@@ -2,7 +2,75 @@
 
 This document turns the currently unresolved issues into a practical action list.
 
-## Current status update, 2026-05-12
+## Current status update, 2026-07-21
+
+Direct source-code verification of every "Must Fix Before Rerun" item and a
+spot-check of three "Should Fix Before Manuscript" items (6, 8, 9), done
+line-by-line against the current tree rather than re-trusting the 2026-05-12
+annotations below. Docker `oxphos_dav_analysis` (image `48a9069ef362`) was used
+where a live run was needed (see [[claude-bug-verification-2026-07-20]]-style
+methodology).
+
+Confirmed still accurate as of today:
+- Item 2 (`primary_symbol`): confirmed resolved — `src/utils/gene_reference.py`
+  populates `primary_symbol`, and `00c_download_mtdna_ncbi_seqs.py:61` reads
+  `gene_data.get("symbol") or gene_data.get("primary_symbol")`.
+- Item 3 (TaxID/sanitizer schema): confirmed resolved and more robustly than
+  stated — `src/data_curation/04_sanitize_all_alignments.py` classifies
+  headers directly from the FASTA files themselves (`classify_header()`); it
+  has no runtime dependency on `00e_build_taxid_species_map.py`'s output at
+  all, so the two can never drift out of schema sync.
+- Item 4 (path conventions): confirmed resolved. No `Path("/app")` or literal
+  `"/app"` string remains anywhere in `src/`. The three specific old
+  `src/data_prep` mismatches (gene-coordinate filenames, HGNC lookup path) do
+  not recur in the current `src/data_download`/`src/data_curation` scripts —
+  `00g_fetch_mtdna_gene_coords.py`/`00h_fetch_nuclear_gene_coords.py` write
+  exactly the filenames `01_curate_variants.py` reads, and all HGNC lookups
+  go through the same `RAW_REFERENCE_DIR` constant in
+  `src/utils/download_paths.py`.
+- Item 5 (MyVariant completeness): confirmed resolved as an execution-safety
+  issue — `00b_download_annotation_data.py` explicitly refuses a fresh blind
+  MyVariant fetch and requires an existing dated file; the underlying
+  data-completeness limitation is unchanged (expected — it's a data-source
+  limitation, not a code bug).
+- Item 8 (proxy/isoform tagging): confirmed current —
+  `proxy_mapping_used` and `mapped_with_isoform_offset` are both live fields
+  in `src/structural/00_map_davs_to_structure.py`.
+- Item 9 (multi-model manifest): confirmed current and accurately described —
+  `data/reference/structure_model_manifest.tsv` has a real `role` column:
+  10 `primary`, 11 `validation`, 5 `reference` rows.
+
+Found to be stale and corrected:
+- **Item 6's counts were out of date.** The note quoted `505`
+  `mature_offset_candidate` and `154` `residue_anchoring_failure` rows. The
+  current `results/structural/dar_structure_map.csv` (37,677 rows total, the
+  present canonical count) actually shows **207** `mature_offset_candidate`
+  and **192** `residue_anchoring_failure`, plus two categories the note never
+  mentions at all: `structural_ineligible` (27,042 rows — the largest
+  category in the table) and `chain_assignment_or_model_gap` (126, see the
+  P9 fix in [[claude-bug-verification-2026-07-20]]). The qualitative
+  conclusion ("not stage-breaking, but a real structural coverage limit") is
+  still correct; only the specific numbers were stale.
+
+**New finding, not previously in this ledger — item 1's residual caution was
+actually understated, and a second script shares the P3 bug pattern:**
+
+- The `locus.split("/")[0]` overlap-collapse fallback is confirmed still
+  present in exactly the two files the note already names as residual risk:
+  `src/phylo/prepare_pagel_hpc.py:210` and `src/phylo/00_prep_iqtree_jobs.py:78`.
+  In both cases it's a last-resort fallback behind `interpreted_gene`
+  and `classification_gene` checks, so it should be inert as long as
+  `interpreted_gene` stays populated for every classified cDAV — but it is
+  not neutralized, only unreached in the common case.
+- **`src/phylo/prepare_pagel_hpc.py:212`** contains
+  `cdav_spp = set(var.get("lineages_with_disease_allele", []))` — the exact
+  unguarded pattern that P3 (commit `beedd76`, 2026-07-18) fixed in
+  `src/structural/01_find_compensating_partners.py` via a `_species_set()`
+  helper. That fix was never applied to this script. It feeds the Pagel HPC
+  job-prep step directly, so it's upstream of every Pagel result currently in
+  `compensatory_partners.csv`. No evidence the JSON-string-encoding bug is
+  actually firing today (same as the original P3 finding), but the guard is
+  missing here too.
 
 This note is preserved as a historical issue ledger. Older problem statements
 are not deleted; instead, each item is marked with its current status.
