@@ -36,10 +36,41 @@ Significance threshold for compensatory_partners.csv:
   (pagel_fdr ≤ 0.10 OR branch_cooccur_fdr ≤ 0.10) AND low_power == False
   Falls back to fisher_fdr ≤ 0.10 if neither phylogenetic test has run yet.
 
+Run modes
+─────────
+Default (no args) — everything in one process. Fisher/branch co-occurrence
+are fast; Pagel is run inline in a single R session bounded by a 7200s (2h)
+wall-time budget. Fine for smoke-testing or small pair counts, but with the
+full ~4,200-pair Pagel-eligible set this budget is nowhere near enough
+(confirmed 2026-07-21: only ~60-150 pairs/2h on both a local Docker
+container and a single lambda HPC node — a full serial run would take
+close to a week). Use the chunked modes below for a real run:
+
+  1. python 01_find_compensating_partners.py --prep-pagel-jobs \\
+         --jobs-dir data/phylo/partners_pagel_jobs --n-chunks 60
+     Runs Pass 1 (Fisher + branch co-occurrence, fast), writes
+     all_records.json plus per-pair pruned-tree/trait files and chunk
+     manifests under --jobs-dir. Also writes
+     scripts/slurm_partners_pagel_array.sh (a SLURM array script).
+
+  2. Transfer --jobs-dir and scripts/slurm_partners_pagel_array.sh to HPC,
+     sbatch the array script. Each task calls the existing
+     src/phylo/pagel_discrete.R in its already-supported chunk mode
+     (<chunk.tsv> <out_file>, with built-in checkpointing) — no changes
+     needed to the R side at all.
+
+  3. Copy results/structural/partners_pagel_results/ back, then:
+     python 01_find_compensating_partners.py --merge-pagel-jobs \\
+         --jobs-dir data/phylo/partners_pagel_jobs
+     Loads all_records.json, fills in pagel_p from the chunk result files,
+     computes global Pagel FDR, and writes the same three output CSVs as
+     the default mode.
+
 Run from project root:
   python src/structural/01_find_compensating_partners.py
 """
 
+import argparse
 import copy
 import csv
 import json
@@ -71,11 +102,17 @@ ANC_MAPS    = ROOT / "data" / "phylo" / "ancestral_state_maps.json"
 CROSS_SPP   = ROOT / "data" / "phylo" / "cross_genome_species.txt"
 PAGEL_R     = ROOT / "src" / "phylo" / "pagel_discrete.R"
 
+DEFAULT_JOBS_DIR    = ROOT / "data" / "phylo" / "partners_pagel_jobs"
+DEFAULT_RESULTS_DIR = ROOT / "results" / "structural" / "partners_pagel_results"
+SLURM_SCRIPT         = ROOT / "scripts" / "slurm_partners_pagel_array.sh"
+
 _MASK            = {"-", "X", "!", "*"}
 _INCOMP_CLASSES  = {"hbond", "electrostatic"}
 _INCOMP_MIN_SENS = 0.5
 _INCOMP_MIN_SPEC = 0.5
 _PAGEL_MIN_SPP   = 20    # minimum species for Pagel test
+_FISHER_PREFILTER = 0.20  # only run Pagel where fisher_p < this
+_PAGEL_WALL_BUDGET = 7200  # 2 h; default (unchunked) mode only
 
 _ALIAS_EQUIV = {"COXFA4": "NDUFA4", "NDUFA4": "COXFA4"}
 _TIER_ORDER  = {"Tier A": 0, "Tier B": 1, "Tier C": 2}
@@ -178,7 +215,7 @@ def prune_tree_to_species(species: set[str]):
     return t, remaining
 
 
-# ── Pagel's discrete test ─────────────────────────────────────────────────────
+# ── Pagel's discrete test (single-pair; used only by default unchunked mode) ──
 
 def pagel_discrete_test(
     dar_spp: set[str],
@@ -378,10 +415,45 @@ def _species_set(raw) -> set[str]:
     return set(raw)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+def _get_sig(records: list[dict]) -> list[dict]:
+    """
+    Return significant records.
+    Priority: pagel_fdr OR branch_cooccur_fdr (phylogenetically valid).
+    Fallback: fisher_fdr if neither phylogenetic test has run.
+    """
+    has_pagel  = any(r.get("pagel_fdr")         is not None for r in records)
+    has_branch = any(r.get("branch_cooccur_fdr") is not None for r in records)
 
-def main():
-    # ── Load cDAVs ─────────────────────────────────────────────────────────────
+    def is_sig(r):
+        if r.get("low_power"):
+            return False
+        if has_pagel or has_branch:
+            p_ok = (has_pagel  and r.get("pagel_fdr")         is not None and r["pagel_fdr"]         <= 0.10)
+            b_ok = (has_branch and r.get("branch_cooccur_fdr") is not None and r["branch_cooccur_fdr"] <= 0.10)
+            return p_ok or b_ok
+        # fallback
+        fdr = r.get("fisher_fdr")
+        return fdr is not None and fdr <= 0.10
+
+    return [r for r in records if is_sig(r)]
+
+
+# ── Pass 1: Fisher + branch co-occurrence (fast), collect Pagel inputs ─────────
+
+def run_pass1():
+    """
+    Loads cDAVs/contacts/alignments, runs Fisher + branch co-occurrence for
+    every tested pair, and computes their global BH-FDR. Returns everything
+    the Pagel step and the final write-out need.
+
+    Returns:
+      all_records:    list of per-pair dicts (fisher/branch filled in,
+                       pagel_p/pagel_fdr still None)
+      pagel_pending:  list of (rec_idx, dar_spp, test_spp, contact_alt_spp)
+                      for pairs eligible for Pagel (fisher_p < _FISHER_PREFILTER)
+      master_tree:    parsed VertLife tree, or None
+      vert_available: whether Pagel can run at all (tree + R script present)
+    """
     cdavs: dict[str, dict] = {}
     if not CLASSIFIED_PARQUET.exists():
         raise FileNotFoundError(f"Missing classified master table: {CLASSIFIED_PARQUET}")
@@ -399,9 +471,8 @@ def main():
 
     if not cdavs:
         print("No cDAVs found.")
-        return
+        return [], [], None, False
 
-    # ── Load contacts ─────────────────────────────────────────────────────────
     contacts: list[dict] = []
     with open(CONTACTS) as f:
         for row in csv.DictReader(f):
@@ -419,7 +490,6 @@ def main():
     alns = load_alignments(needed_genes)
     print(f"Alignments loaded for {len(alns)} genes.")
 
-    # ── Optional: load ancestral maps and VertLife tree ───────────────────────
     anc_maps: dict = {}
     if ANC_MAPS.exists():
         with open(ANC_MAPS) as f:
@@ -438,19 +508,15 @@ def main():
     else:
         print("VertLife tree or pagel_discrete.R not found — Pagel test will be skipped.")
 
-    # ── Per-DAR tests ─────────────────────────────────────────────────────────
     by_dar: dict[str, list] = defaultdict(list)
     for row in contacts:
         by_dar[row["variant_id"]].append(row)
 
     all_records: list[dict] = []
-    summary_rows: list[dict] = []
-    # Pagel batch: list of (pair_idx_in_all_records, dar_spp, test_spp, contact_alt_spp)
     pagel_pending: list[tuple[int, set, set, set]] = []
 
     master_tree = get_master_tree() if vert_available else None
 
-    # ── Pass 1: Fisher + branch co-occurrence (fast), collect Pagel inputs ────
     for variant_id, dar_contacts in by_dar.items():
         var          = cdavs[variant_id]
         dar_gene     = var.get("interpreted_gene") or var.get("classification_gene") or var.get("locus", "")
@@ -552,7 +618,6 @@ def main():
                     and specificity >= _INCOMP_MIN_SPEC
                 )
 
-                # Branch co-occurrence test (fast — no subprocess)
                 branch_result = branch_cooccurrence_test(
                     anc_maps, dar_gene, dar_aa_coord, var.get("alt_aa", ""),
                     contact_gene, contact_pos, alt_aa,
@@ -563,7 +628,7 @@ def main():
                     "n_contact_only_branches": 0,
                 }
 
-                # Pagel species set (computed now; R call deferred to batch)
+                # Pagel species set (computed now; R call deferred)
                 contact_alt_spp = {
                     sp for sp in readable_spp
                     if sp in c_aln and len(c_aln[sp]) > c_col
@@ -578,9 +643,9 @@ def main():
                 rec_idx = len(all_records) + len(raw_tests)
                 # Only run Pagel for pairs with some Fisher signal (p < 0.20).
                 # Pairs with no signal at the species level will also lack
-                # phylogenetic signal; running Pagel on all 8087 pairs takes
-                # ~45 min due to fitPagel convergence overhead.
-                if vert_available and not low_power and fisher_p < 0.20:
+                # phylogenetic signal; running Pagel on every tested pair is
+                # not tractable even chunked (~9,375 pairs total).
+                if vert_available and not low_power and fisher_p < _FISHER_PREFILTER:
                     pagel_pending.append((rec_idx, cdav_in_aln, test_spp, contact_alt_spp))
 
                 raw_tests.append({
@@ -632,10 +697,6 @@ def main():
         all_records.extend(raw_tests)
 
     # ── Global FDR correction (Fisher + branch co-occurrence) ──────────────────
-    # Corrected once across every tested pair, matching the Pagel FDR pass
-    # below (Pass 2) rather than per-DAR. Per-DAR correction previously let
-    # _get_sig()'s fixed 0.10 threshold silently mean different things
-    # depending on how many contacts a given DAR happened to have.
     valid_fisher = [(i, r["fisher_p"]) for i, r in enumerate(all_records)
                     if r["fisher_p"] is not None]
     if valid_fisher:
@@ -654,157 +715,377 @@ def main():
             all_records[idx]["branch_cooccur_fdr"] = fdr
         print(f"Branch co-occurrence FDR computed globally for {len(valid_branch)} pairs.")
 
-    # ── Pass 2: Pagel batch (one R process for all pairs) ─────────────────────
-    if vert_available and pagel_pending:
-        print(f"\nRunning Pagel batch test for {len(pagel_pending)} pairs (single R session)...")
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            manifest_lines: list[str] = []
-            all_tips = {c.name for c in master_tree.get_terminals()}
+    return all_records, pagel_pending, master_tree, vert_available
 
-            # Cache pruned trees by their species frozenset (read tree once per unique species set)
-            _pruned_tree_cache: dict[frozenset, tuple] = {}
 
-            def get_pruned(test_spp_set: frozenset):
-                """Returns (pruned_newick_path, pruned_spp_set) or (None, None)."""
-                if test_spp_set in _pruned_tree_cache:
-                    return _pruned_tree_cache[test_spp_set]
-                keep = test_spp_set & all_tips
-                if len(keep) < _PAGEL_MIN_SPP:
-                    _pruned_tree_cache[test_spp_set] = (None, None)
-                    return None, None
-                t = copy.deepcopy(master_tree)
-                remove = {c.name for c in t.get_terminals()} - keep
-                for name in remove:
-                    t.prune(name)
-                pruned_spp = frozenset(c.name for c in t.get_terminals())
-                if len(pruned_spp) < _PAGEL_MIN_SPP:
-                    _pruned_tree_cache[test_spp_set] = (None, None)
-                    return None, None
-                # Write once, reuse path for all pairs with same species set
-                tree_f = os.path.join(tmp_dir, f"tree_{len(_pruned_tree_cache)}.nwk")
-                Phylo.write(t, tree_f, "newick")
-                result = (tree_f, pruned_spp)
-                _pruned_tree_cache[test_spp_set] = result
-                return result
+# ── Pagel batch: default (unchunked, single-process) mode ─────────────────────
 
-            for idx, (rec_idx, dar_spp, test_spp, contact_alt_spp) in enumerate(pagel_pending):
-                tree_f, pruned_spp = get_pruned(frozenset(test_spp))
-                if tree_f is None:
+def run_pagel_inline(all_records: list[dict], pagel_pending: list, master_tree) -> None:
+    """
+    Runs Pagel for every pending pair in one R session, bounded by
+    _PAGEL_WALL_BUDGET. Mutates all_records in place (pagel_p) and computes
+    Pagel FDR globally afterward. Only viable for small pair counts — see
+    the chunked prep/merge modes for the full pair set.
+    """
+    if not pagel_pending:
+        return
+
+    print(f"\nRunning Pagel batch test for {len(pagel_pending)} pairs (single R session)...")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        manifest_lines: list[str] = []
+        all_tips = {c.name for c in master_tree.get_terminals()}
+
+        _pruned_tree_cache: dict[frozenset, tuple] = {}
+
+        def get_pruned(test_spp_set: frozenset):
+            if test_spp_set in _pruned_tree_cache:
+                return _pruned_tree_cache[test_spp_set]
+            keep = test_spp_set & all_tips
+            if len(keep) < _PAGEL_MIN_SPP:
+                _pruned_tree_cache[test_spp_set] = (None, None)
+                return None, None
+            t = copy.deepcopy(master_tree)
+            remove = {c.name for c in t.get_terminals()} - keep
+            for name in remove:
+                t.prune(name)
+            pruned_spp = frozenset(c.name for c in t.get_terminals())
+            if len(pruned_spp) < _PAGEL_MIN_SPP:
+                _pruned_tree_cache[test_spp_set] = (None, None)
+                return None, None
+            tree_f = os.path.join(tmp_dir, f"tree_{len(_pruned_tree_cache)}.nwk")
+            Phylo.write(t, tree_f, "newick")
+            result = (tree_f, pruned_spp)
+            _pruned_tree_cache[test_spp_set] = result
+            return result
+
+        for idx, (rec_idx, dar_spp, test_spp, contact_alt_spp) in enumerate(pagel_pending):
+            tree_f, pruned_spp = get_pruned(frozenset(test_spp))
+            if tree_f is None:
+                continue
+
+            trait1_f = os.path.join(tmp_dir, f"t1_{idx}.txt")
+            trait2_f = os.path.join(tmp_dir, f"t2_{idx}.txt")
+
+            with open(trait1_f, "w") as f:
+                for sp in pruned_spp:
+                    f.write(f"{sp}\t{1 if sp in dar_spp else 0}\n")
+            with open(trait2_f, "w") as f:
+                for sp in pruned_spp:
+                    f.write(f"{sp}\t{1 if sp in contact_alt_spp else 0}\n")
+
+            manifest_lines.append(f"{rec_idx}\t{tree_f}\t{trait1_f}\t{trait2_f}")
+        print(f"  Unique tree topologies: {len(_pruned_tree_cache)}")
+
+        if manifest_lines:
+            manifest_f = os.path.join(tmp_dir, "manifest.tsv")
+            with open(manifest_f, "w") as f:
+                f.write("\n".join(manifest_lines) + "\n")
+
+            pagel_lines: list[str] = []
+            deadline = time.monotonic() + _PAGEL_WALL_BUDGET
+            try:
+                proc = subprocess.Popen(
+                    ["Rscript", str(PAGEL_R), manifest_f],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                )
+                for line in proc.stdout:
+                    pagel_lines.append(line)
+                    if time.monotonic() > deadline:
+                        proc.terminate()
+                        print(f"  Pagel wall-time budget ({_PAGEL_WALL_BUDGET}s) reached "
+                              f"— {len(pagel_lines)} pairs completed, remainder skipped. "
+                              f"Use --prep-pagel-jobs/--merge-pagel-jobs for the full pair set.")
+                        break
+                proc.stdout.close()
+                proc.wait()
+                stderr_out = proc.stderr.read()
+                print(f"  Pagel batch complete ({len(pagel_lines)} pairs processed).")
+                if stderr_out:
+                    print(f"  R stderr (first 500 chars): {stderr_out[:500]}")
+            except Exception as e:
+                print(f"  Pagel batch failed: {e}")
+
+            for line in pagel_lines:
+                parts = line.strip().split("\t")
+                if len(parts) == 3 and parts[1] == "pagel_p":
+                    try:
+                        rec_idx = int(parts[0])
+                        val_str = parts[2]
+                        p = None if val_str == "NA" else float(val_str)
+                        all_records[rec_idx]["pagel_p"] = p
+                    except (ValueError, IndexError):
+                        pass
+
+    _apply_pagel_fdr(all_records)
+
+
+def _apply_pagel_fdr(all_records: list[dict]) -> None:
+    valid_pagel = [(i, r["pagel_p"]) for i, r in enumerate(all_records)
+                   if r["pagel_p"] is not None]
+    if valid_pagel:
+        idxs, ps = zip(*valid_pagel)
+        fdrs = bh_fdr(list(ps))
+        for idx, fdr in zip(idxs, fdrs):
+            all_records[idx]["pagel_fdr"] = fdr
+        print(f"  Pagel FDR computed for {len(valid_pagel)} pairs.")
+
+
+# ── Chunked Pagel: prep mode ───────────────────────────────────────────────────
+
+def write_pagel_jobs(all_records: list[dict], pagel_pending: list, master_tree,
+                      jobs_dir: Path, n_chunks: int) -> None:
+    """
+    Writes everything a SLURM array needs to run Pagel for `pagel_pending`
+    in parallel, using the *existing* src/phylo/pagel_discrete.R chunk mode
+    (<chunk.tsv> <out_file>) unmodified:
+
+      jobs_dir/all_records.json       — full Pass-1 snapshot, for --merge-pagel-jobs
+      jobs_dir/trees/tree_NNNN.nwk    — pruned trees, one per unique species set
+      jobs_dir/traits/t1_NNNN.txt     — DAR-state trait file per pending pair
+      jobs_dir/traits/t2_NNNN.txt     — contact-state trait file per pending pair
+      jobs_dir/manifest.tsv           — full manifest (identity_key, tree, t1, t2)
+      jobs_dir/chunks/chunk_NNNN.tsv  — manifest split into n_chunks pieces
+      scripts/slurm_partners_pagel_array.sh — SLURM array script (n_chunks tasks)
+    """
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    trees_dir  = jobs_dir / "trees"
+    traits_dir = jobs_dir / "traits"
+    chunks_dir = jobs_dir / "chunks"
+    trees_dir.mkdir(exist_ok=True)
+    traits_dir.mkdir(exist_ok=True)
+    chunks_dir.mkdir(exist_ok=True)
+
+    with open(jobs_dir / "all_records.json", "w") as f:
+        json.dump(all_records, f)
+    print(f"Wrote {len(all_records)} records → {jobs_dir / 'all_records.json'}")
+
+    if not pagel_pending:
+        print("No Pagel-pending pairs — nothing to chunk.")
+        return
+
+    all_tips = {c.name for c in master_tree.get_terminals()}
+    _pruned_tree_cache: dict[frozenset, str] = {}
+    manifest_lines: list[str] = []
+
+    def get_pruned_path(test_spp_set: frozenset) -> tuple[str | None, frozenset | None]:
+        if test_spp_set in _pruned_tree_cache:
+            path = _pruned_tree_cache[test_spp_set]
+            if path is None:
+                return None, None
+            # Re-derive pruned_spp from the cached tree file's terminals
+            t = Phylo.read(path, "newick")
+            return path, frozenset(c.name for c in t.get_terminals())
+        keep = test_spp_set & all_tips
+        if len(keep) < _PAGEL_MIN_SPP:
+            _pruned_tree_cache[test_spp_set] = None
+            return None, None
+        t = copy.deepcopy(master_tree)
+        remove = {c.name for c in t.get_terminals()} - keep
+        for name in remove:
+            t.prune(name)
+        pruned_spp = frozenset(c.name for c in t.get_terminals())
+        if len(pruned_spp) < _PAGEL_MIN_SPP:
+            _pruned_tree_cache[test_spp_set] = None
+            return None, None
+        tree_f = trees_dir / f"tree_{len(_pruned_tree_cache):04d}.nwk"
+        Phylo.write(t, str(tree_f), "newick")
+        _pruned_tree_cache[test_spp_set] = str(tree_f)
+        return str(tree_f), pruned_spp
+
+    for idx, (rec_idx, dar_spp, test_spp, contact_alt_spp) in enumerate(pagel_pending):
+        tree_f, pruned_spp = get_pruned_path(frozenset(test_spp))
+        if tree_f is None:
+            continue
+
+        trait1_f = traits_dir / f"t1_{idx:05d}.txt"
+        trait2_f = traits_dir / f"t2_{idx:05d}.txt"
+        with open(trait1_f, "w") as f:
+            for sp in pruned_spp:
+                f.write(f"{sp}\t{1 if sp in dar_spp else 0}\n")
+        with open(trait2_f, "w") as f:
+            for sp in pruned_spp:
+                f.write(f"{sp}\t{1 if sp in contact_alt_spp else 0}\n")
+
+        # Paths relative to jobs_dir — the SLURM script cd's there first, so
+        # this manifest transfers cleanly to a different absolute path on HPC.
+        manifest_lines.append(
+            f"{rec_idx}\t{Path(tree_f).relative_to(jobs_dir)}\t"
+            f"{trait1_f.relative_to(jobs_dir)}\t{trait2_f.relative_to(jobs_dir)}"
+        )
+
+    n_unique_trees = sum(1 for v in _pruned_tree_cache.values() if v is not None)
+    print(f"Unique tree topologies: {n_unique_trees}")
+    print(f"Pagel-eligible pairs with a usable pruned tree: {len(manifest_lines)} / {len(pagel_pending)}")
+
+    manifest_path = jobs_dir / "manifest.tsv"
+    with open(manifest_path, "w") as f:
+        f.write("\n".join(manifest_lines) + "\n")
+    print(f"Manifest → {manifest_path}")
+
+    n_chunks = max(1, min(n_chunks, len(manifest_lines)))
+    chunk_size = -(-len(manifest_lines) // n_chunks)  # ceil division
+    for i in range(0, len(manifest_lines), chunk_size):
+        chunk_lines = manifest_lines[i : i + chunk_size]
+        chunk_idx   = i // chunk_size + 1
+        chunk_path  = chunks_dir / f"chunk_{chunk_idx:04d}.tsv"
+        with open(chunk_path, "w") as f:
+            f.write("\n".join(chunk_lines) + "\n")
+    actual_n_chunks = (len(manifest_lines) + chunk_size - 1) // chunk_size
+    print(f"Split into {actual_n_chunks} chunks (~{chunk_size} pairs each) → {chunks_dir}")
+
+    _write_slurm_script(actual_n_chunks, jobs_dir)
+
+
+_HPC_HOME_ABS = "/home/ad2347/OxPhos_DAV"
+_HPC_WORK_ABS = "/work/WorkDevelopmentC/ad2347/OxPhos_DAV"
+
+
+def _write_slurm_script(n_chunks: int, jobs_dir: Path) -> None:
+    jobs_dir_rel = jobs_dir.relative_to(ROOT)
+    results_dir_rel = DEFAULT_RESULTS_DIR.relative_to(ROOT)
+    # SBATCH directives are read literally by the scheduler at submission
+    # time -- they do NOT get shell variable expansion, so these two lines
+    # must use the hardcoded absolute path, not a $HPC_WORK reference
+    # (matching the convention already used by slurm_pagel_array.sh /
+    # slurm_foldx_array.sh).
+    script = f"""\
+#!/bin/bash
+#SBATCH --job-name=partners_pagel
+#SBATCH --array=1-{n_chunks}
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=4G
+#SBATCH --time=06:00:00
+#SBATCH --output={_HPC_WORK_ABS}/logs/partners_pagel_%A_%a.out
+#SBATCH --error={_HPC_WORK_ABS}/logs/partners_pagel_%A_%a.err
+
+# Auto-generated by src/structural/01_find_compensating_partners.py
+# --prep-pagel-jobs — do not edit manually.
+#
+# Chunked HPC array run for the compensatory-partners Pagel test (distinct
+# from the phylo-stage's own Pagel run — scripts/slurm_pagel_array.sh — this
+# targets {jobs_dir_rel}, not data/phylo/pagel_jobs/). Reuses
+# src/phylo/pagel_discrete.R's existing chunk mode unmodified.
+#
+# Transfer inputs (run locally first):
+#   rsync -av {jobs_dir_rel}/ hpc:$HPC_WORK/{jobs_dir_rel}/
+#   rsync -av src/ hpc:$HPC_HOME/src/
+#   rsync -av scripts/slurm_partners_pagel_array.sh hpc:$HPC_HOME/scripts/
+#
+# Submit on HPC:
+#   mkdir -p $HPC_WORK/{results_dir_rel} $HPC_WORK/logs
+#   sbatch $HPC_HOME/scripts/slurm_partners_pagel_array.sh
+#
+# Copy results back:
+#   rsync -av hpc:$HPC_WORK/{results_dir_rel}/ {results_dir_rel}/
+#
+# Merge locally:
+#   docker run --rm -v $(pwd):/app oxphos_dav_analysis conda run -n oxphos_dav \\
+#       python src/structural/01_find_compensating_partners.py --merge-pagel-jobs \\
+#       --jobs-dir {jobs_dir_rel}
+
+set -euo pipefail
+
+module load miniconda/2024-02-20
+eval "$(conda shell.bash hook)"
+conda activate OXPHOS_DAV
+
+CHUNK=$(printf "%04d" ${{SLURM_ARRAY_TASK_ID}})
+HPC_HOME="{_HPC_HOME_ABS}"
+HPC_WORK="{_HPC_WORK_ABS}"
+JOBS_DIR="$HPC_WORK/{jobs_dir_rel}"
+OUT_DIR="$HPC_WORK/{results_dir_rel}"
+mkdir -p "$OUT_DIR" "$HPC_WORK/logs"
+
+# Paths inside chunk TSV are relative to jobs_dir — cd there first
+cd "$JOBS_DIR"
+
+Rscript "$HPC_HOME/src/phylo/pagel_discrete.R" \\
+    "chunks/chunk_${{CHUNK}}.tsv" \\
+    "$OUT_DIR/results_${{CHUNK}}.tsv"
+
+echo "Done: chunk $CHUNK"
+"""
+    SLURM_SCRIPT.write_text(script)
+    print(f"SLURM script ({n_chunks} tasks) → {SLURM_SCRIPT}")
+
+
+# ── Chunked Pagel: merge mode ──────────────────────────────────────────────────
+
+def merge_pagel_chunks(jobs_dir: Path, results_dir: Path) -> list[dict]:
+    """
+    Loads all_records.json, fills in pagel_p from every
+    results_dir/results_*.tsv chunk-result file (format:
+    identity_key\\tpagel_p\\t<value_or_NA>, written by pagel_discrete.R's
+    chunk mode), computes global Pagel FDR, and returns the updated records.
+    """
+    records_path = jobs_dir / "all_records.json"
+    if not records_path.exists():
+        raise FileNotFoundError(
+            f"{records_path} not found — run --prep-pagel-jobs first."
+        )
+    with open(records_path) as f:
+        all_records = json.load(f)
+    print(f"Loaded {len(all_records)} records from {records_path}")
+
+    result_files = sorted(results_dir.glob("results_*.tsv"))
+    if not result_files:
+        print(f"WARNING: no results_*.tsv files found in {results_dir} — "
+              f"pagel_p will remain unfilled for every pair.")
+
+    n_filled = 0
+    n_total_lines = 0
+    for rf in result_files:
+        with open(rf) as f:
+            for line in f:
+                parts = line.strip().split("\t")
+                if len(parts) != 3 or parts[1] != "pagel_p":
                     continue
-
-                trait1_f = os.path.join(tmp_dir, f"t1_{idx}.txt")
-                trait2_f = os.path.join(tmp_dir, f"t2_{idx}.txt")
-
-                with open(trait1_f, "w") as f:
-                    for sp in pruned_spp:
-                        f.write(f"{sp}\t{1 if sp in dar_spp else 0}\n")
-                with open(trait2_f, "w") as f:
-                    for sp in pruned_spp:
-                        f.write(f"{sp}\t{1 if sp in contact_alt_spp else 0}\n")
-
-                manifest_lines.append(f"{rec_idx}\t{tree_f}\t{trait1_f}\t{trait2_f}")
-            print(f"  Unique tree topologies: {len(_pruned_tree_cache)}")
-
-            if manifest_lines:
-                manifest_f = os.path.join(tmp_dir, "manifest.tsv")
-                with open(manifest_f, "w") as f:
-                    f.write("\n".join(manifest_lines) + "\n")
-
-                # Stream results line-by-line so partial output is saved if
-                # the wall-time budget is exhausted before all pairs complete.
-                # The R script flushes stdout after each pair, so every completed
-                # pair is recoverable even on an early termination.
-                _PAGEL_WALL_BUDGET = 7200   # 2 h; use HPC chunk mode for larger runs
-                pagel_lines: list[str] = []
-                deadline = time.monotonic() + _PAGEL_WALL_BUDGET
+                n_total_lines += 1
                 try:
-                    proc = subprocess.Popen(
-                        ["Rscript", str(PAGEL_R), manifest_f],
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                    )
-                    for line in proc.stdout:
-                        pagel_lines.append(line)
-                        if time.monotonic() > deadline:
-                            proc.terminate()
-                            print(f"  Pagel wall-time budget ({_PAGEL_WALL_BUDGET}s) reached "
-                                  f"— {len(pagel_lines)} pairs completed, remainder skipped.")
-                            break
-                    proc.stdout.close()
-                    proc.wait()
-                    stderr_out = proc.stderr.read()
-                    print(f"  Pagel batch complete ({len(pagel_lines)} pairs processed).")
-                    if stderr_out:
-                        print(f"  R stderr (first 500 chars): {stderr_out[:500]}")
-                except Exception as e:
-                    print(f"  Pagel batch failed: {e}")
+                    rec_idx = int(parts[0])
+                    val_str = parts[2]
+                    p = None if val_str == "NA" else float(val_str)
+                except (ValueError, IndexError):
+                    continue
+                if 0 <= rec_idx < len(all_records):
+                    all_records[rec_idx]["pagel_p"] = p
+                    n_filled += 1
+    print(f"Read {n_total_lines} result lines from {len(result_files)} chunk files; "
+          f"filled pagel_p for {n_filled} records.")
 
-                for line in pagel_lines:
-                    parts = line.strip().split("\t")
-                    if len(parts) == 3 and parts[1] == "pagel_p":
-                        try:
-                            rec_idx = int(parts[0])
-                            val_str = parts[2]
-                            p = None if val_str == "NA" else float(val_str)
-                            all_records[rec_idx]["pagel_p"] = p
-                        except (ValueError, IndexError):
-                            pass
+    _apply_pagel_fdr(all_records)
+    return all_records
 
-        # Pagel FDR across all records
-        valid_pagel = [(i, r["pagel_p"]) for i, r in enumerate(all_records)
-                       if r["pagel_p"] is not None]
-        if valid_pagel:
-            idxs, ps = zip(*valid_pagel)
-            fdrs = bh_fdr(list(ps))
-            for idx, fdr in zip(idxs, fdrs):
-                all_records[idx]["pagel_fdr"] = fdr
-            print(f"  Pagel FDR computed for {len(valid_pagel)} pairs.")
 
-    # ── Per-DAR concordance summary (uses fully annotated all_records) ─────────
+# ── Final write-out (shared by all modes) ──────────────────────────────────────
+
+def finalize_and_write(all_records: list[dict]) -> None:
+    """
+    Builds the per-DAR concordance summary directly from all_records (every
+    row already carries its DAR's n_cdav_spp/n_bg_spp from Pass 1 — no need
+    to reload the classified parquet or alignments here) and writes all
+    three output CSVs.
+    """
     by_ann_id = defaultdict(list)
     for rec in all_records:
         by_ann_id[rec["variant_id"]].append(rec)
 
+    summary_rows: list[dict] = []
     for variant_id, recs in by_ann_id.items():
-        var      = cdavs[variant_id]
-        dar_gene = var.get("interpreted_gene") or var.get("classification_gene") or var.get("locus", "")
-        dar_structure_gene = recs[0].get("dar_structure_gene", "")
-        tier     = var["tier"]
-
-        dar_aln = alns.get(dar_gene)
-        if dar_aln is None:
-            continue
-        try:
-            _, dar_ref_gapped = get_ref_seq(dar_aln)
-        except ValueError:
-            continue
-        dar_col_map  = build_pos_to_col(dar_ref_gapped)
-        dar_aa_coord = int(recs[0]["dar_aa_coord"])
-        dar_col      = dar_col_map.get(dar_aa_coord)
-
-        cdav_spp    = _species_set(var.get("lineages_with_disease_allele", []))
-        readable_spp = set()
-        if dar_col is not None:
-            readable_spp = {
-                sp for sp, seq in dar_aln.items()
-                if sp != "Homo_sapiens" and len(seq) > dar_col
-                and seq[dar_col] not in _MASK
-            }
-
-        cdav_in_aln_summary = cdav_spp & readable_spp
-        bg_spp_summary      = readable_spp - cdav_spp
         sig = _get_sig(recs)
+        first = recs[0]
         summary_rows.append({
             "variant_id":        variant_id,
-            "ann_id":            var.get("ann_id", ""),
-            "tier":              tier,
-            "dar_gene":          dar_gene,
-            "dar_structure_gene": dar_structure_gene,
-            "dar_genome":        var.get("genome", ""),
-            "dar_aa_coord":      dar_aa_coord,
-            "dar_ref_aa":        var.get("ref_aa", ""),
-            "dar_alt_aa":        var.get("alt_aa", ""),
-            "n_cdav_spp":        len(cdav_in_aln_summary),
-            "n_bg_spp":          len(bg_spp_summary),
+            "ann_id":            first.get("ann_id", ""),
+            "tier":              first["tier"],
+            "dar_gene":          first["dar_gene"],
+            "dar_structure_gene": first.get("dar_structure_gene", ""),
+            "dar_genome":        first.get("dar_genome", ""),
+            "dar_aa_coord":      first["dar_aa_coord"],
+            "dar_ref_aa":        first.get("dar_ref_aa", ""),
+            "dar_alt_aa":        first.get("dar_alt_aa", ""),
+            "n_cdav_spp":        first["n_cdav_spp"],
+            "n_bg_spp":          first["n_bg_spp"],
             "n_contacts_tested": len(recs),
             "n_sig_contacts":    len(sig),
             "n_incompatible":    sum(1 for t in sig if t["likely_incompatible"]),
@@ -813,7 +1094,6 @@ def main():
             "sig_contact_genes": ",".join(sorted({t["contact_gene"] for t in sig})),
         })
 
-    # ── Write all_tested_pairs.csv ────────────────────────────────────────────
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     all_fields = [
@@ -844,7 +1124,6 @@ def main():
                 row[fld] = f"{row[fld]:.3f}" if isinstance(row[fld], float) else row[fld]
             w.writerow(row)
 
-    # ── Write compensatory_partners.csv (derived significant view) ────────────
     sig_candidates = _get_sig(all_records)
     pair_fields = [f for f in all_fields if f not in ("n_dar_only_branches", "n_contact_only_branches")]
     with open(OUT_DIR / "compensatory_partners.csv", "w", newline="") as f:
@@ -859,7 +1138,6 @@ def main():
                 row[fld] = f"{row[fld]:.3f}" if isinstance(row[fld], float) else row[fld]
             w.writerow(row)
 
-    # ── Write concordance_summary.csv ─────────────────────────────────────────
     summary_fields = [
         "variant_id", "ann_id", "tier", "dar_gene", "dar_structure_gene", "dar_genome",
         "dar_aa_coord", "dar_ref_aa", "dar_alt_aa",
@@ -873,7 +1151,10 @@ def main():
         w.writeheader()
         w.writerows(sorted(summary_rows, key=lambda r: (_TIER_ORDER.get(r["tier"], 99), -r["n_sig_contacts"])))
 
-    # ── Summary ───────────────────────────────────────────────────────────────
+    by_tier = Counter(r["tier"] for r in all_records)
+    cdav_count_by_tier = Counter()
+    for variant_id, recs in by_ann_id.items():
+        cdav_count_by_tier[recs[0]["tier"]] += 1
     sig_by_tier    = Counter(t["tier"] for t in sig_candidates)
     intra_by_tier  = Counter(t["tier"] for t in sig_candidates if t["contact_type"] != "mt-nuc")
     inter_by_tier  = Counter(t["tier"] for t in sig_candidates if t["contact_type"] == "mt-nuc")
@@ -891,12 +1172,12 @@ def main():
     print(f"  Significant pairs : {len(sig_candidates)}")
     print(f"{'Tier':<10} {'cDAVs':>7} {'sig pairs':>10} {'intra':>7} {'inter':>7} {'incompatible':>13}")
     print("-" * 60)
-    for t in sorted(by_tier, key=lambda x: _TIER_ORDER.get(x, 99)):
-        n_cdavs = by_tier.get(t, 0)
+    for t in sorted(cdav_count_by_tier, key=lambda x: _TIER_ORDER.get(x, 99)):
+        n_cdavs = cdav_count_by_tier.get(t, 0)
         print(f"  {t:<8} {n_cdavs:>7} {sig_by_tier[t]:>10} "
               f"{intra_by_tier[t]:>7} {inter_by_tier[t]:>7} {incomp_by_tier[t]:>13}")
     print("-" * 60)
-    print(f"  {'Total':<8} {len(cdavs):>7} {len(sig_candidates):>10} "
+    print(f"  {'Total':<8} {sum(cdav_count_by_tier.values()):>7} {len(sig_candidates):>10} "
           f"{sum(intra_by_tier.values()):>7} {sum(inter_by_tier.values()):>7} "
           f"{sum(incomp_by_tier.values()):>13}")
     print(f"\nOutputs:")
@@ -905,27 +1186,47 @@ def main():
     print(f"  concordance_summary.csv   ({len(summary_rows)} rows)")
 
 
-def _get_sig(records: list[dict]) -> list[dict]:
-    """
-    Return significant records.
-    Priority: pagel_fdr OR branch_cooccur_fdr (phylogenetically valid).
-    Fallback: fisher_fdr if neither phylogenetic test has run.
-    """
-    has_pagel  = any(r.get("pagel_fdr")         is not None for r in records)
-    has_branch = any(r.get("branch_cooccur_fdr") is not None for r in records)
+# ── Main ──────────────────────────────────────────────────────────────────────
 
-    def is_sig(r):
-        if r.get("low_power"):
-            return False
-        if has_pagel or has_branch:
-            p_ok = (has_pagel  and r.get("pagel_fdr")         is not None and r["pagel_fdr"]         <= 0.10)
-            b_ok = (has_branch and r.get("branch_cooccur_fdr") is not None and r["branch_cooccur_fdr"] <= 0.10)
-            return p_ok or b_ok
-        # fallback
-        fdr = r.get("fisher_fdr")
-        return fdr is not None and fdr <= 0.10
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--prep-pagel-jobs", action="store_true",
+                         help="Run Pass 1 and write chunked Pagel job files instead of running Pagel inline.")
+    parser.add_argument("--merge-pagel-jobs", action="store_true",
+                         help="Merge completed Pagel chunk results and write the final output CSVs.")
+    parser.add_argument("--jobs-dir", type=Path, default=DEFAULT_JOBS_DIR,
+                         help=f"Pagel job files directory (default: {DEFAULT_JOBS_DIR.relative_to(ROOT)})")
+    parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR,
+                         help=f"Pagel chunk results directory (default: {DEFAULT_RESULTS_DIR.relative_to(ROOT)})")
+    parser.add_argument("--n-chunks", type=int, default=60,
+                         help="Number of SLURM array chunks to split Pagel-pending pairs into (default: 60).")
+    args = parser.parse_args()
 
-    return [r for r in records if is_sig(r)]
+    if args.prep_pagel_jobs and args.merge_pagel_jobs:
+        parser.error("--prep-pagel-jobs and --merge-pagel-jobs are mutually exclusive.")
+
+    if args.merge_pagel_jobs:
+        all_records = merge_pagel_chunks(args.jobs_dir, args.results_dir)
+        finalize_and_write(all_records)
+        return
+
+    all_records, pagel_pending, master_tree, vert_available = run_pass1()
+    if not all_records and not pagel_pending:
+        return
+
+    if args.prep_pagel_jobs:
+        if not vert_available:
+            print("VertLife tree / pagel_discrete.R not available — nothing to chunk.")
+            return
+        write_pagel_jobs(all_records, pagel_pending, master_tree, args.jobs_dir, args.n_chunks)
+        return
+
+    # Default: run everything inline in one process (fine for smoke-testing
+    # or small pair counts; see module docstring for the chunked path).
+    if vert_available and pagel_pending:
+        run_pagel_inline(all_records, pagel_pending, master_tree)
+
+    finalize_and_write(all_records)
 
 
 if __name__ == "__main__":
