@@ -9,6 +9,16 @@ This project identifies **compensated disease-associated residues (c-DARs)** in 
 - **AA-level c-DAR**: Any non-human species harboring the human-pathogenic amino acid.
 - **NT-level c-DAR**: Stricter — the species uses the exact same codon as the human mutation.
 
+## Pipeline Verification Ledger — check this first, every session
+
+Before trusting any status claim in `notes/`, in a wiki page, or in a number already sitting in `results/`, read:
+
+`/Users/ad2347/Documents/Obsidian_Wiki/projects/OXPHOS_DAV/concepts/pipeline-verification-ledger.md`
+
+This is a stage-by-stage record of what has actually been re-verified against current source/data versus what is still resting on older documentation — including files in this repo and pages in the wiki. A 2026-07-21 audit found that "documented as fixed" and "verified against current code/data today" are not the same claim: a stale mutagenesis ranking, a silently-unwired merge step (`00_prioritize_pairs.py` never actually reading `results/phylo/tier1_pairs.csv`), a second live instance of an already-"fixed" bug in a sibling script, and named example results that had quietly stopped being true all survived undetected in prose until someone directly re-checked source and data.
+
+**After making any fix to this pipeline** — a bug fix, a data regeneration, a re-run ranking, anything that changes what's actually true about a stage — add or update a row in that ledger before considering the task done. A fix that isn't reflected there is exactly how the drift above happened in the first place.
+
 ## Environment
 
 All analysis runs inside the Docker container `oxphos_dav_analysis`. Build and enter it:
