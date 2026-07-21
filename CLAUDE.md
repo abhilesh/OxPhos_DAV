@@ -21,7 +21,7 @@ This is a stage-by-stage record of what has actually been re-verified against cu
 
 ### Recording new findings — wiki first, not `notes/`/`docs/`
 
-When a session produces new findings, audit results, status changes, or decisions about this pipeline, **record them in the Obsidian wiki, not by editing files in `notes/` or `docs/`.** This is precisely the failure mode that caused the drift above: a note got a correct, well-verified update in place, but because pulling repo content into the wiki is a manual, point-in-time ingest rather than a live sync, that update never reached the wiki and became invisible drift one level removed — the wiki kept citing the note's old state as if it were current. `notes/`/`docs/` remain useful as historical, mostly-static reference material (see "Notes Directory" below) that gets *read* for context — they are not where new information should be *written* during agent-assisted work on this project. The wiki (`/Users/ad2347/Documents/Obsidian_Wiki/projects/OXPHOS_DAV/`), and specifically the verification ledger above, is the durable record now.
+When a session produces new findings, audit results, status changes, or decisions about this pipeline, **record them in the Obsidian wiki, not by editing files in `notes/` or `docs/`.** This is precisely the failure mode that caused the drift above: a note got a correct, well-verified update in place, but because pulling repo content into the wiki is a manual, point-in-time ingest rather than a live sync, that update never reached the wiki and became invisible drift one level removed — the wiki kept citing the note's old state as if it were current. `notes/`/`docs/` remain useful as historical, mostly-static reference material that gets *read* for context — they are not where new information should be *written* during agent-assisted work on this project. The wiki (`/Users/ad2347/Documents/Obsidian_Wiki/projects/OXPHOS_DAV/`), and specifically the verification ledger above, is the durable record now.
 
 ## Environment
 
@@ -114,17 +114,6 @@ results/mutagenesis/         ← mutagenesis prioritization outputs
 | `transcript_position_maps.json` / `genomic_coordinate_maps.json` | Built by curation stage; used by classify |
 | `TOGA_overview_table_hg38_*.tsv` | TOGA ortholog quality scores |
 | `aaindex_properties_*.json` | Physicochemical AA property matrices (loaded by `variant_record.py`) |
-
-## Notes Directory
-
-`notes/` contains the authoritative pipeline documentation. Read in this order for context:
-1. `pipeline_consistency_and_manuscript_prep.md` — overall project contract
-2. `resolved_nuances_and_fixes.md` — resolved upstream issues
-3. `unresolved_issues_ranked.md` — current open issues (prioritized)
-4. `curation_and_classification_issues_and_fixes.md` — curation/classify contract
-5. `structural_phase_plan.md` + `structural_mapping_major_problems_report.md` — structural stage
-6. `running_results.md` — current output counts and metrics
-7. `final_analysis_filtering_decisions.md` — filtering flags that must be applied at the final analysis layer (not intermediate scripts)
 
 ## Obsidian Wiki Project Tracker
 
