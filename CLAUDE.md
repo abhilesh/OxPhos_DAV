@@ -19,6 +19,10 @@ This is a stage-by-stage record of what has actually been re-verified against cu
 
 **After making any fix to this pipeline** — a bug fix, a data regeneration, a re-run ranking, anything that changes what's actually true about a stage — add or update a row in that ledger before considering the task done. A fix that isn't reflected there is exactly how the drift above happened in the first place.
 
+### Recording new findings — wiki first, not `notes/`/`docs/`
+
+When a session produces new findings, audit results, status changes, or decisions about this pipeline, **record them in the Obsidian wiki, not by editing files in `notes/` or `docs/`.** This is precisely the failure mode that caused the drift above: a note got a correct, well-verified update in place, but because pulling repo content into the wiki is a manual, point-in-time ingest rather than a live sync, that update never reached the wiki and became invisible drift one level removed — the wiki kept citing the note's old state as if it were current. `notes/`/`docs/` remain useful as historical, mostly-static reference material (see "Notes Directory" below) that gets *read* for context — they are not where new information should be *written* during agent-assisted work on this project. The wiki (`/Users/ad2347/Documents/Obsidian_Wiki/projects/OXPHOS_DAV/`), and specifically the verification ledger above, is the durable record now.
+
 ## Environment
 
 All analysis runs inside the Docker container `oxphos_dav_analysis`. Build and enter it:
