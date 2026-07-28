@@ -3,10 +3,20 @@ src/phylo/08_pagel_complex_stratification.py
 
 Step 3.4 — Pagel complex stratification and contact-type enrichment.
 
-Assigns each of the 44 Pagel-significant pairs to an OXPHOS complex, tests
-whether specific structural contact types (H-bond, electrostatic, hydrophobic,
-vdW) are enriched among significant vs non-significant pairs, and checks whether
+Assigns each Pagel-significant pair to an OXPHOS complex, tests whether
+specific structural contact types (H-bond, electrostatic, hydrophobic, vdW)
+are enriched among significant vs non-significant pairs, and checks whether
 SDH-excluded nuclear signal spans multiple complexes.
+
+The sig-vs-non-sig contact-class comparison reads `all_tested_pairs.csv`
+(ALL tested pairs), not `compensatory_partners.csv` -- that file contains
+*only* the significant subset by construction, so deriving a "non-significant"
+comparison group from within it is only non-empty by accident (previously it
+worked because stale, since-corrected branch-cooccurrence values left some
+non-Pagel-significant rows inside the significant-only file; with branch
+co-occurrence now correctly contributing zero pairs, that accidental
+non-empty group became genuinely empty, and chi2_contingency crashed on an
+all-zero column -- found and fixed 2026-07-21).
 
 Output: results/phylo/pagel_by_complex.csv
 """
@@ -20,7 +30,7 @@ from scipy.stats import chi2_contingency, fisher_exact
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-COMP_PART = ROOT / "results" / "structural" / "compensatory_partners.csv"
+ALL_PAIRS = ROOT / "results" / "structural" / "all_tested_pairs.csv"
 OUT_FILE  = ROOT / "results" / "phylo" / "pagel_by_complex.csv"
 
 MTDNA = {"MT-ND1","MT-ND2","MT-ND3","MT-ND4","MT-ND4L","MT-ND5","MT-ND6",
@@ -72,11 +82,12 @@ def assign_complex(gene: str) -> str:
 
 def main() -> None:
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    cp = pd.read_csv(COMP_PART)
+    cp = pd.read_csv(ALL_PAIRS)
     cp["dar_compartment"] = cp["dar_gene"].apply(
         lambda g: "mtDNA" if g in MTDNA else "nucDNA")
     cp["is_sdh"] = cp["dar_gene"].isin(SDH)
     cp["complex"] = cp["dar_gene"].apply(assign_complex)
+    cp["pagel_fdr"] = pd.to_numeric(cp["pagel_fdr"], errors="coerce")
     cp["pagel_sig"] = cp["pagel_fdr"] <= 0.10
 
     sig  = cp[cp["pagel_sig"]]

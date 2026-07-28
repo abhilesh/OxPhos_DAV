@@ -36,7 +36,13 @@ OUT_FILE   = ROOT / "results" / "phylo" / "timing_mitonuclear_extended.csv"
 MTDNA = {"MT-ND1","MT-ND2","MT-ND3","MT-ND4","MT-ND4L","MT-ND5","MT-ND6",
          "MT-CYB","MT-CO1","MT-CO2","MT-CO3","MT-ATP6","MT-ATP8"}
 
-WITHIN_GENOME_BASELINE = 0.632  # permissive rate from 44 Pagel pairs (63.2%)
+WITHIN_GENOME_BASELINE = 0.551181  # permissive rate from 43 testable of 47 Pagel-significant
+                                    # pairs (140/254 branch events, 55.1%) -- recomputed
+                                    # 2026-07-21 from a fresh 06_temporal_ordering.py run
+                                    # against the P3/P7-corrected, regenerated
+                                    # compensatory_partners.csv. Supersedes the previous
+                                    # 0.632 (44 pre-correction Pagel pairs, 63.2%) -- do not
+                                    # revert without also re-deriving from a fresh run.
 
 
 def summarise_direction(df: pd.DataFrame, direction: str) -> None:
