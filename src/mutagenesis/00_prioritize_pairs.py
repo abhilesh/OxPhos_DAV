@@ -11,8 +11,19 @@ Scoring rubric (max 17 points):
   Epistatic pre-adaptation  : contact_first → 2; co_occurring → 1; else → 0
   Likely incompatible       : True → 2
   Convergence               : n_dar_gain_branches ≥ 10 → 2; ≥ 2 → 1; 1 → 0
-  Confidence tier           : high_confidence → 1
+  Confidence tier           : timing_confidence == "high" → 1
   Contact proximity         : Cβ-Cβ distance < 5 Å → 1
+
+Timing/physicochemical fields (dominant_timing, n_dar_gain_branches,
+timing_confidence, physicochemical_type) are not present in
+compensatory_partners.csv itself -- they're merged in from results/phylo/
+below. dominant_timing/n_dar_gain_branches/timing_confidence come from
+timing_annotations_v2.csv (the current, post-P7-fix pathway, regenerated
+2026-07-29, full 47/47 coverage). physicochemical_type has no v2 equivalent
+yet, so it's sourced from the older timing_annotations.csv (May 2026,
+43/47 coverage) -- a deterministic AA-property classification that doesn't
+depend on the Pagel-significance retest, so staleness there doesn't carry
+the same risk as it would for a significance-derived field.
 
 Outputs:
   results/mutagenesis/prioritized_pairs.csv  — all pairs scored and ranked
@@ -36,6 +47,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # ─── Paths ────────────────────────────────────────────────────────────────────
 PARTNERS_CSV   = ROOT / "results" / "structural" / "compensatory_partners.csv"
 CONTACTS_CSV   = ROOT / "results" / "structural" / "dar_contacts_cbcb8A.csv"
+TIMING_V2_CSV  = ROOT / "results" / "phylo" / "timing_annotations_v2.csv"
+TIMING_V1_CSV  = ROOT / "results" / "phylo" / "timing_annotations.csv"
 STRUCTURES_DIR = ROOT / "data" / "structures"
 OUT_DIR        = ROOT / "results" / "mutagenesis"
 
@@ -110,8 +123,8 @@ def score_pair(row: pd.Series, cbcb_dist: float) -> int:
         elif n >= 2:
             s += 1
 
-    tier = str(row.get("confidence_tier", "")).lower().strip()
-    if tier == "high_confidence":
+    tier = str(row.get("timing_confidence", "")).lower().strip()
+    if tier == "high":
         s += 1
 
     if pd.notna(cbcb_dist) and cbcb_dist < 5.0:
@@ -194,13 +207,33 @@ def main() -> None:
     ]
     contacts_sub = contacts[[c for c in coord_cols if c in contacts.columns]].drop_duplicates()
 
+    print("Loading phylogenetic timing data...")
+    timing_v2 = pd.read_csv(TIMING_V2_CSV)
+    timing_v2_sub = timing_v2[
+        ["dar_gene", "dar_aa_coord", "contact_gene", "contact_refseq_pos",
+         "dominant_timing", "n_dar_gain_branches", "timing_confidence"]
+    ].drop_duplicates(subset=["dar_gene", "dar_aa_coord", "contact_gene", "contact_refseq_pos"])
+
+    timing_v1 = pd.read_csv(TIMING_V1_CSV)
+    timing_v1_sub = timing_v1[
+        ["dar_gene", "dar_aa_coord", "contact_gene", "contact_refseq_pos", "physicochemical_type"]
+    ].drop_duplicates(subset=["dar_gene", "dar_aa_coord", "contact_gene", "contact_refseq_pos"])
+
     # Ensure join columns are consistently typed: float → int → str (handles "45.0" == "45")
-    for df in (partners, contacts_sub):
+    for df in (partners, contacts_sub, timing_v2_sub, timing_v1_sub):
         for col in ("dar_aa_coord", "contact_refseq_pos"):
             if col in df.columns:
                 df[col] = df[col].apply(
                     lambda v: str(int(float(v))) if pd.notna(v) else str(v)
                 )
+
+    timing_join = ["dar_gene", "dar_aa_coord", "contact_gene", "contact_refseq_pos"]
+    partners = partners.merge(timing_v2_sub, on=timing_join, how="left")
+    n_v2 = partners["dominant_timing"].notna().sum()
+    print(f"  Timing (v2, current post-fix pathway): {n_v2}/{len(partners)} pairs matched")
+    partners = partners.merge(timing_v1_sub, on=timing_join, how="left")
+    n_v1 = partners["physicochemical_type"].notna().sum()
+    print(f"  Physicochemical type (v1, no v2 equivalent yet): {n_v1}/{len(partners)} pairs matched")
 
     # Join on physical residue positions only — ann_id formats differ between files
     join_keys = ["dar_gene", "dar_aa_coord", "dar_alt_aa", "contact_gene", "contact_refseq_pos"]
