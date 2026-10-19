@@ -1,0 +1,140 @@
+---
+title: "OxPhos Disease-Associated Variant Analysis"
+author: "Abhilesh Dhawanjewar"
+date: today
+format:
+    html:
+        code-fold: true
+        embed-resources: true
+        toc: true
+        toc-location: left
+        html-math-method: katex
+        theme: cosmo
+bibliography: references.bib
+execute:
+    echo: false
+    warning: false
+    message: false
+---
+
+```{r}
+#| label: setup
+library(here)
+library(arrow)      # read Parquet outputs
+library(dplyr)
+library(ggplot2)
+library(knitr)
+
+# All numbers in this report are read from live outputs, never typed by hand.
+# Provenance for each stage lives in the Obsidian wiki: pipeline-verification-ledger.
+```
+
+## Summary
+
+<!-- 3-5 sentences: what a c-DAR is, how many were found, headline result. Fill LAST. -->
+
+## 1. Background and Definitions
+
+- AA-level c-DAR: any non-human species harbouring the human-pathogenic amino acid.
+- NT-level c-DAR: the species also uses the exact same codon as the human mutation.
+- Compensated vs uncompensated DAVs (cDAV / uDAV).
+
+## 2. Data Sources
+
+<!-- Keep the existing "Data Sources" text from OxPhos_DAV_report.qmd here. -->
+
+## 3. Variant Curation
+
+Source: `data/derived/curated/variants_master_curated.parquet`
+
+- Variants retained and excluded, per source (MITOMAP, ClinVar) and per genome (mtDNA, nucDNA).
+- Cross-source duplicate groups.
+- Table: DAVs per complex and gene (`data/derived/results/dav_metrics_by_gene.tsv`).
+
+```{r}
+#| label: tbl-curation
+# TODO: curated variant counts by source x genome
+```
+
+## 4. Cross-Species Classification (cDAV / uDAV)
+
+Source: `data/derived/classified/variants_master_classified.parquet`
+
+- TOGA alignments, `AlignmentParser`, exception registry.
+- AA-level vs NT-level calls; QC splits (clean / warning).
+- Filtering decisions F1-F10 applied at this layer (see `notes/final_analysis_filtering_decisions.md`).
+
+```{r}
+#| label: fig-cdav-by-complex
+# TODO: cDAV fraction by OXPHOS complex, AA vs NT level
+```
+
+## 5. Structural Mapping
+
+Source: `results/structural/`
+
+- Structure panel and coverage (`structure_model_summary.csv`; panel eligibility registry).
+- Chain assignment method and fallback threshold (P8; currently uncalibrated).
+- Contact definition: C-beta to C-beta <= 8 A (C-alpha for Gly), classified by contact type.
+- Mapping failures (`structure_mapping_failure_audit.csv`).
+
+```{r}
+#| label: fig-structural-coverage
+# TODO: coverage by complex / gene
+```
+
+## 6. Compensatory Partner Discovery
+
+Source: `results/structural/compensatory_partners.csv` (currently 47 significant pairs)
+
+- Tests: Fisher's exact, Pagel's discrete, branch co-occurrence.
+- Global FDR correction (P7).
+- Table: significant pairs with effect sizes.
+
+```{r}
+#| label: tbl-partners
+# TODO: compensatory_partners.csv summarised
+```
+
+## 7. Phylogenetic Evidence
+
+Source: `results/phylo/`
+
+- Independent origins (`n_dar_gain_branches`, from `timing_annotations_v2.csv` only).
+- Temporal ordering: does the DAR or its partner change first?
+- Rate-controlled null (Pyvolve), mito-nuclear comparison, within-genome baseline.
+
+```{r}
+#| label: fig-timing
+# TODO: contact-first vs DAR-first vs co-occurring
+```
+
+## 8. Mutagenesis Target Prioritization
+
+Source: `results/mutagenesis/prioritized_pairs.csv`
+
+- Scoring rubric (max 17 points) and top targets.
+- FoldX ddG, mutual information and DCA: report only once computed for the current pair set.
+
+```{r}
+#| label: tbl-top-targets
+# TODO: top targets table
+```
+
+## 9. Limitations and Caveats
+
+- Known biases and unresolved analyses (see the scientific-questions research plan).
+- Uncalibrated thresholds (P8).
+- Pairs with low statistical power.
+
+## 10. Reproducibility
+
+- Pipeline stages and entry-point scripts; Docker image `oxphos_dav_analysis`.
+- Test suite status and the date it was last run.
+
+```{r}
+#| label: session-info
+sessionInfo()
+```
+
+## References

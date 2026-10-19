@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=foldx_ddg
-#SBATCH --array=0-59
+#SBATCH --array=0-44
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=4G
 #SBATCH --time=04:00:00
@@ -11,7 +11,7 @@
 #SBATCH --mail-user=abhilesh7@gmail.com
 #
 # SLURM array for FoldX BuildModel/AnalyseComplex ΔΔG (01_foldx_ddg.py).
-# 60 tasks, round-robin over the input pair list; each pair costs ~8 min
+# 45 tasks (current 47-pair corrected set), round-robin over the input pair list; each pair costs ~8 min
 # (intraprotein: 3 BuildModel runs) to ~16 min (interprotein: +AnalyseComplex).
 # For the full 694-pair prioritized_pairs.csv with 629 pairs remaining after
 # the local 64-pair run, 60 chunks × ~11 pairs/chunk ≈ 2 hr per task at the
@@ -56,7 +56,7 @@ set -euo pipefail
 
 HPC_HOME="/home/ad2347/OxPhos_DAV"
 HPC_WORK="/work/WorkDevelopmentC/ad2347/OxPhos_DAV"
-N_CHUNKS=60
+N_CHUNKS=45
 
 # Input pair list for this array run. Swap to tier1_pairs.csv (82 pairs, only
 # 24 of which currently have PDB coordinates) or a custom subset as needed —
